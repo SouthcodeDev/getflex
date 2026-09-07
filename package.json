@@ -1,0 +1,19 @@
+{
+  "name": "getflex",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "terser": "^5.51.2",
+    "vite": "^8.2.2"
+  }
+}
