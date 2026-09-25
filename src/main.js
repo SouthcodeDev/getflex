@@ -1269,9 +1269,9 @@ function initAccordionCSS() {
   });
 }
 
-function initFooterAnim() {
-  const footer = document.querySelector('[data-footer]');
-  const maskEl = footer.querySelector('[data-footer-mask]');
+function initCTAAnim() {
+  const footer = document.querySelector('[data-cta]');
+  const maskEl = footer.querySelector('[data-cta-mask]');
 
   gsap.from(maskEl, {
     maskSize: "0%",
@@ -1300,7 +1300,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initMegaNavDirectionalHover();
   initBouncyContentTabs();
   initAccordionCSS();
-  initFooterAnim();
+  initCTAAnim();
 });
 
   document.fonts.ready.then(() => {
