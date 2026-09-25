@@ -1,7 +1,7 @@
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { SplitText } from 'gsap/all';
-import { inertiaPlugin } from 'gsap/InertiaPlugin';
+import { InertiaPlugin } from 'gsap/InertiaPlugin';
 import Lenis from 'lenis';
 
 gsap.registerPlugin(ScrollTrigger, SplitText);
