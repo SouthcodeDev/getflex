@@ -970,7 +970,7 @@ function initGlobalParallax() {
   
   burger.addEventListener("click", () => state.mobileMenuOpen ? closeMobileMenu() : openMobileMenu());
   
-  backBtn.addEventListener("click", closeMobilePanel);
+  // backBtn.addEventListener("click", closeMobilePanel);
   
   window.addEventListener("resize", handleResize);
 
