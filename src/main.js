@@ -122,15 +122,15 @@ function initTextSplit() {
     chars: {
       type: "chars, lines",
       mask: "chars",
-      charsClass: "char-mask",
-      linesClass: "line-mask",
+      charsClass: "char",
+      linesClass: "line",
       autoSplit: true,
     },
     words: {
       type: "words, lines",
       mask: "lines",
-      wordsClass: "word-mask",
-      linesClass: "line-mask",
+      wordsClass: "word",
+      linesClass: "line",
       autoSplit: true,
     },
     lines: {
