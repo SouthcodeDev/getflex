@@ -214,6 +214,7 @@ function initLoadAnimations() {
     const delay = parseFloat(el.getAttribute("data-anim-load-delay")) || 0;
     gsap.from(el, {
       opacity: 0,
+            y: "3rem",
       duration: 1,
       ease: "expo.out",
       delay: globalLoadDelay + delay,
@@ -225,6 +226,7 @@ function initLoadAnimations() {
     const delay = parseFloat(el.getAttribute("data-anim-load-delay")) || 0;
     gsap.from(el.children, {
       opacity: 0,
+            y: "3rem",
       duration: 1.5,
       stagger: {
         each: 0.075,
@@ -298,6 +300,7 @@ function initScrollAnimations() {
 
     gsap.from(children, {
       opacity: 0,
+            y: "3rem",
       duration: 1.66,
       ease: "expo.out",
       stagger: {
@@ -315,6 +318,7 @@ function initScrollAnimations() {
   // Single element fades in on entry
   document.querySelectorAll("[data-anim-scroll=fade]").forEach((el) => {
     gsap.from(el, {
+      y: "3rem",
       opacity: 0,
       duration: 1.66,
       ease: "expo.out",
@@ -1281,6 +1285,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initMegaNavDirectionalHover();
   initBouncyContentTabs();
   initAccordionCSS();
+});
 
   document.fonts.ready.then(() => {
     initFOUC();
@@ -1288,4 +1293,3 @@ document.addEventListener('DOMContentLoaded', () => {
     initLoadAnimations();
     initTextSplit();
   })
-});
