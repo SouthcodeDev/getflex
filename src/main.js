@@ -1274,7 +1274,7 @@ function initCTAAnim() {
   const maskEl = footer.querySelector('[data-cta-mask]');
 
   gsap.from(maskEl, {
-    maskSize: "0%",
+    maskSize: "auto 0%",
     scrollTrigger: {
       trigger: footer,
       start: "top bottom",
