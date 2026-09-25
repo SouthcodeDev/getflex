@@ -1269,6 +1269,21 @@ function initAccordionCSS() {
   });
 }
 
+function initFooterAnim() {
+  const footer = document.querySelector('[data-footer]');
+  const maskEl = footer.querySelector('[data-footer-mask]');
+
+  gsap.from(maskEl, {
+    maskSize: "0%",
+    scrollTrigger: {
+      trigger: footer,
+      start: "top bottom",
+      end: "center center",
+      scrub: true,
+    }
+  })
+}
+
 
 /* ==========================================================================
    Init
@@ -1285,6 +1300,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initMegaNavDirectionalHover();
   initBouncyContentTabs();
   initAccordionCSS();
+  initFooterAnim();
 });
 
   document.fonts.ready.then(() => {
