@@ -1416,6 +1416,299 @@ function initSwipers() {
   });
 }
 
+/**
+ * Bill split calculator
+ *
+ * Root:  [data-calc="root"] with data-calc-page="home | bills | rent | mortgage | car"
+ *        optional data-calc-default="<bill key>" to start on a different bill of that page's list
+ *
+ * Emits "calculator:update" on the root (detail: { bill, amount, payment1, payment2, fees })
+ * and mirrors the active bill on root[data-calc-active] so a Learn more modal can read it.
+ */
+function initCalculators() {
+  const CONFIG = {
+    fees: {
+      processing: 0.005, // of the total bill, added to payment 1
+      split: 0.03,       // of the split (2nd) half, added to payment 2
+      membership: 5.99,  // flat, rent only, added to payment 1
+    },
+    // amount = default when the bill is selected; min/max/step drive the slider
+    bills: {
+      rent:      { label: "Rent",        amount: 1400, min: 500, max: 5000, step: 10, membership: true },
+      mortgage:  { label: "Mortgage",    amount: 2400, min: 500, max: 6000, step: 10 },
+      car:       { label: "Car payment", amount: 480,  min: 100, max: 1500, step: 10 },
+      utilities: { label: "Utilities",   amount: 300,  min: 50,  max: 1000, step: 10 },
+      childcare: { label: "Childcare",   amount: 400,  min: 100, max: 2500, step: 10 },
+      insurance: { label: "Insurance",   amount: 350,  min: 50,  max: 1500, step: 10 },
+      internet:  { label: "Internet",    amount: 250,  min: 25,  max: 500,  step: 5 },
+      tv:        { label: "TV",          amount: 250,  min: 25,  max: 500,  step: 5 },
+      phone:     { label: "Phone",       amount: 250,  min: 25,  max: 500,  step: 5 },
+    },
+    // Bills available per page; the first one is the default. One bill = no dropdown.
+    pages: {
+      home:     ["rent", "mortgage", "car", "utilities", "childcare", "insurance", "internet", "tv", "phone"],
+      bills:    ["utilities", "childcare", "insurance", "internet", "tv", "phone"],
+      rent:     ["rent"],
+      mortgage: ["mortgage"],
+      car:      ["car"],
+    },
+    defaultPage: "home",
+    pageKeySteps: 10, // PageUp / PageDown jump size, in steps
+  };
+
+  const usd0 = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+  const usd2 = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
+  const clamp = (v, min, max) => Math.min(Math.max(v, min), max);
+
+  // Work in integer cents so the two payments always add up exactly
+  function calculate(total, bill) {
+    const totalC = Math.round(total * 100);
+    const firstHalf = Math.round(totalC / 2);
+    const secondHalf = totalC - firstHalf;
+    const processing = Math.round(totalC * CONFIG.fees.processing);
+    const split = Math.round(secondHalf * CONFIG.fees.split);
+    const membership = bill.membership ? Math.round(CONFIG.fees.membership * 100) : 0;
+
+    return {
+      payment1: (firstHalf + processing + membership) / 100,
+      payment2: (secondHalf + split) / 100,
+      fees: { processing: processing / 100, split: split / 100, membership: membership / 100 },
+    };
+  }
+
+  let uid = 0;
+
+  document.querySelectorAll('[data-calc="root"]').forEach((root) => {
+    if (root.dataset.calcReady === "true") return;
+
+    const q = (name) => root.querySelector(`[data-calc="${name}"]`);
+    const ui = {
+      select: q("select"),
+      toggle: q("select-toggle"),
+      label: q("select-label"),
+      list: q("select-list"),
+      optionTemplate: q("select-option"),
+      amount: q("amount"),
+      slider: q("slider"),
+      fill: q("slider-fill"),
+      thumb: q("slider-thumb"),
+      payment1: q("payment-1"),
+      payment2: q("payment-2"),
+      feeProcessing: q("fee-processing"),
+      feeSplit: q("fee-split"),
+      feeMembership: q("fee-membership"),
+      rowMembership: q("row-membership"),
+    };
+    if (!ui.slider || !ui.thumb || !ui.amount || !ui.payment1 || !ui.payment2) return;
+
+    root.dataset.calcReady = "true";
+    const id = `calc-${++uid}`;
+
+    const page = CONFIG.pages[root.dataset.calcPage] ? root.dataset.calcPage : CONFIG.defaultPage;
+    const billKeys = CONFIG.pages[page].filter((key) => CONFIG.bills[key]);
+    const startKey = billKeys.includes(root.dataset.calcDefault) ? root.dataset.calcDefault : billKeys[0];
+
+    const state = { key: startKey, value: CONFIG.bills[startKey].amount };
+    const bill = () => CONFIG.bills[state.key];
+
+    /* ---------- Render ---------- */
+
+    function render() {
+      const b = bill();
+      const progress = ((state.value - b.min) / (b.max - b.min)) * 100;
+      const result = calculate(state.value, b);
+
+      if (ui.fill) ui.fill.style.width = `${progress}%`;
+      ui.thumb.style.left = `${progress}%`;
+      ui.amount.textContent = usd0.format(state.value);
+
+      ui.thumb.setAttribute("aria-valuemin", b.min);
+      ui.thumb.setAttribute("aria-valuemax", b.max);
+      ui.thumb.setAttribute("aria-valuenow", state.value);
+      ui.thumb.setAttribute("aria-valuetext", `${usd0.format(state.value)} per month`);
+
+      ui.payment1.textContent = usd2.format(result.payment1);
+      ui.payment2.textContent = usd2.format(result.payment2);
+      if (ui.feeProcessing) ui.feeProcessing.textContent = usd2.format(result.fees.processing);
+      if (ui.feeSplit) ui.feeSplit.textContent = usd2.format(result.fees.split);
+      if (ui.feeMembership) ui.feeMembership.textContent = usd2.format(CONFIG.fees.membership);
+      // Inline display beats the Webflow class's display value; the hidden attribute wouldn't
+      if (ui.rowMembership) ui.rowMembership.style.display = b.membership ? "" : "none";
+
+      root.dataset.calcActive = state.key;
+      root.dispatchEvent(
+        new CustomEvent("calculator:update", {
+          detail: { bill: state.key, amount: state.value, ...result },
+        })
+      );
+    }
+
+    /* ---------- Slider ---------- */
+
+    function setValue(raw) {
+      const { min, max, step } = bill();
+      const value = clamp(Math.round((raw - min) / step) * step + min, min, max);
+      if (value === state.value) return;
+      state.value = value;
+      render();
+    }
+
+    ui.thumb.setAttribute("role", "slider");
+    ui.thumb.setAttribute("tabindex", "0");
+    ui.thumb.setAttribute("aria-label", "Monthly bill amount");
+    ui.thumb.setAttribute("aria-orientation", "horizontal");
+
+    let rect = null;
+    const valueAt = (clientX) => {
+      const { min, max } = bill();
+      return min + clamp((clientX - rect.left) / rect.width, 0, 1) * (max - min);
+    };
+
+    ui.slider.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      rect = ui.slider.getBoundingClientRect(); // cached for the whole drag
+      ui.slider.setPointerCapture(e.pointerId);
+      ui.slider.dataset.calcDragging = "true";
+      ui.thumb.focus({ preventScroll: true });
+      setValue(valueAt(e.clientX));
+    });
+
+    ui.slider.addEventListener("pointermove", (e) => {
+      if (ui.slider.dataset.calcDragging !== "true") return;
+      setValue(valueAt(e.clientX));
+    });
+
+    const endDrag = () => delete ui.slider.dataset.calcDragging;
+    ui.slider.addEventListener("pointerup", endDrag);
+    ui.slider.addEventListener("pointercancel", endDrag);
+
+    ui.thumb.addEventListener("keydown", (e) => {
+      const { min, max, step } = bill();
+      const moves = {
+        ArrowRight: state.value + step,
+        ArrowUp: state.value + step,
+        ArrowLeft: state.value - step,
+        ArrowDown: state.value - step,
+        PageUp: state.value + step * CONFIG.pageKeySteps,
+        PageDown: state.value - step * CONFIG.pageKeySteps,
+        Home: min,
+        End: max,
+      };
+      if (!(e.key in moves)) return;
+      e.preventDefault();
+      setValue(moves[e.key]);
+    });
+
+    /* ---------- Bill dropdown ---------- */
+
+    const hasDropdown = ui.select && ui.toggle && ui.list && ui.optionTemplate && billKeys.length > 1;
+    const options = [];
+
+    if (ui.label) ui.label.textContent = bill().label;
+
+    if (!hasDropdown) {
+      // Single-bill pages: plain label, no toggle behaviour
+      if (ui.select) ui.select.dataset.calcStatic = "true";
+      if (ui.list) ui.list.remove();
+    } else {
+      ui.list.id = `${id}-list`;
+      ui.list.setAttribute("role", "listbox");
+      ui.list.setAttribute("aria-label", "Bill type");
+
+      ui.toggle.setAttribute("role", "button");
+      ui.toggle.setAttribute("tabindex", "0");
+      ui.toggle.setAttribute("aria-haspopup", "listbox");
+      ui.toggle.setAttribute("aria-controls", ui.list.id);
+      ui.toggle.setAttribute("aria-expanded", "false");
+
+      // The single option in Webflow is a styling template, cloned per bill
+      ui.optionTemplate.remove();
+      billKeys.forEach((key) => {
+        const option = ui.optionTemplate.cloneNode(true);
+        option.textContent = CONFIG.bills[key].label;
+        option.id = `${id}-${key}`;
+        option.dataset.calcBill = key;
+        option.setAttribute("role", "option");
+        option.setAttribute("tabindex", "-1");
+        ui.list.appendChild(option);
+        options.push(option);
+      });
+
+      const syncSelected = () =>
+        options.forEach((o) => o.setAttribute("aria-selected", String(o.dataset.calcBill === state.key)));
+      syncSelected();
+
+      const isOpen = () => ui.select.dataset.calcOpen === "true";
+
+      const onOutside = (e) => {
+        if (!ui.select.contains(e.target)) close(false);
+      };
+
+      function open() {
+        ui.select.dataset.calcOpen = "true";
+        ui.toggle.setAttribute("aria-expanded", "true");
+        (options.find((o) => o.dataset.calcBill === state.key) || options[0]).focus({ preventScroll: true });
+        document.addEventListener("pointerdown", onOutside);
+      }
+
+      function close(returnFocus) {
+        if (!isOpen()) return;
+        ui.select.dataset.calcOpen = "false";
+        ui.toggle.setAttribute("aria-expanded", "false");
+        document.removeEventListener("pointerdown", onOutside);
+        if (returnFocus) ui.toggle.focus({ preventScroll: true });
+      }
+
+      function choose(key) {
+        if (key !== state.key) {
+          state.key = key;
+          state.value = bill().amount; // each bill resets to its own default amount
+          if (ui.label) ui.label.textContent = bill().label;
+          syncSelected();
+          render();
+        }
+        close(true);
+      }
+
+      ui.toggle.addEventListener("click", () => (isOpen() ? close(true) : open()));
+      ui.toggle.addEventListener("keydown", (e) => {
+        if (["Enter", " ", "ArrowDown", "ArrowUp"].includes(e.key)) {
+          e.preventDefault();
+          open();
+        }
+      });
+
+      ui.list.addEventListener("click", (e) => {
+        const option = e.target.closest("[data-calc-bill]");
+        if (option) choose(option.dataset.calcBill);
+      });
+
+      ui.list.addEventListener("keydown", (e) => {
+        const index = options.indexOf(document.activeElement);
+        const focusAt = (i) => options[(i + options.length) % options.length].focus();
+
+        switch (e.key) {
+          case "ArrowDown": focusAt(index + 1); break;
+          case "ArrowUp":   focusAt(index - 1); break;
+          case "Home":      focusAt(0); break;
+          case "End":       focusAt(options.length - 1); break;
+          case "Enter":
+          case " ":
+            if (index > -1) choose(options[index].dataset.calcBill);
+            break;
+          case "Escape":    close(true); break;
+          case "Tab":       close(false); return; // let focus move on naturally
+          default: return;
+        }
+        e.preventDefault();
+      });
+    }
+
+    render();
+  });
+}
+
 /* ==========================================================================
    Init
    --------------------------------------------------------------------------
@@ -1434,6 +1727,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initCTAAnim();
     initMomentumBasedHover();
   initSwipers();
+  initCalculators();
 });
 
 
