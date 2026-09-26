@@ -3,8 +3,11 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { SplitText } from 'gsap/all';
 import { InertiaPlugin } from 'gsap/InertiaPlugin';
 import Lenis from 'lenis';
+import Swiper from 'swiper';
+import { Pagination } from 'swiper/modules';
 
-gsap.registerPlugin(ScrollTrigger, SplitText);
+gsap.registerPlugin(ScrollTrigger, SplitText, InertiaPlugin);
+
 
 /* ==========================================================================
    Attribute reference (set these in Webflow)
@@ -990,7 +993,7 @@ function initGlobalParallax() {
     settle: 0.25,
     squashDown: 0.15,
     squashBack: 0.45,
-    overshoot: 16,
+    overshoot: 8,
     cardSquash: 0.2,
     cardInflate: 0.45,
   };
@@ -1285,7 +1288,6 @@ function initCTAAnim() {
   })
 }
 
-gsap.registerPlugin(InertiaPlugin);
 
 function initMomentumBasedHover() {
 
@@ -1359,6 +1361,62 @@ function initMomentumBasedHover() {
 }
 
 /* ==========================================================================
+   Swipers
+   --------------------------------------------------------------------------
+   data-swiper="name"          the .swiper container (standard Swiper markup:
+                               .swiper > .swiper-wrapper > .swiper-slide)
+   data-swiper-pagination      empty div for the dots, inside the container or
+                               a sibling of it
+   ========================================================================== */
+
+function initSwipers() {
+  // One entry per data-swiper value. `media` is when the swiper should exist.
+  const SWIPERS = {
+    testimonials: {
+      media: '(max-width: 767px)',
+      options: {
+        slidesPerView: 1,
+        spaceBetween: 16,
+        grabCursor: true,
+      },
+    },
+  };
+
+  document.querySelectorAll('[data-swiper]').forEach((container) => {
+    const setup = SWIPERS[container.dataset.swiper];
+    if (!setup) return;
+
+    const pagination =
+      container.querySelector('[data-swiper-pagination]') ||
+      container.parentElement.querySelector(':scope > [data-swiper-pagination]');
+
+    let swiper = null;
+
+    const enable = () => {
+      if (swiper) return;
+      swiper = new Swiper(container, {
+        ...setup.options,
+        modules: [Pagination],
+        pagination: pagination ? { el: pagination, clickable: true } : false,
+      });
+    };
+
+    const disable = () => {
+      if (!swiper) return;
+      swiper.destroy(true, true);
+      swiper = null;
+      // Swiper leaves its bullets behind on destroy
+      if (pagination) pagination.innerHTML = '';
+    };
+
+    const mq = window.matchMedia(setup.media);
+    const update = () => (mq.matches ? enable() : disable());
+    mq.addEventListener('change', update);
+    update();
+  });
+}
+
+/* ==========================================================================
    Init
    --------------------------------------------------------------------------
    Lenis and parallax start immediately; anything that measures text waits on
@@ -1375,6 +1433,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initAccordionCSS();
   initCTAAnim();
     initMomentumBasedHover();
+  initSwipers();
 });
 
 
