@@ -448,6 +448,14 @@ function initGlobalParallax() {
     (id) => document.querySelector(`[data-burger-line='${id}']`)
   );
 
+  // Flag the nav once the page leaves the top, clear it when back at the top
+  const navContainer = document.querySelector("[data-nav-container]");
+  if (navContainer) {
+    ScrollTrigger.create({
+      onUpdate: (self) => navContainer.classList.toggle("is-scrolled", self.scroll() > 128),
+    });
+  }
+
   // State
   const state = {
     isOpen: false,
