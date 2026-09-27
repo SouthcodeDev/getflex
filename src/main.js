@@ -1714,13 +1714,27 @@ function initCalculators() {
    ========================================================================== */
 function initCardSplit() {
   const CONFIG = {
-    gap: 16, // px between the two cards once split
-    blur: 12, // goo reach — must match the stdDeviation in the SVG embed
+    gap: 24, // px between the two cards once split
+    // Goo reach: the neck can bridge a gap of roughly 1.35 × blur, so keep blur above (gap + overshoot) / 1.35
+    // or it tears on its own before the snap. Contrast sharpens the edge; its threshold is fixed at 0.5 so the
+    // goo never grows past the card's edge (a lower threshold shows a rim around the initial card).
+    // Both are written to the SVG filter by JS, so the embed's values don't matter
+    blur: 22,
+    contrast: 40,
     intro: { delay: 0.375, duration: 1.2, ease: "expo.out", y: "3rem", scale: 0.96 },
-    swap: { duration: 0.8, ease: "expo.inOut", stagger: 0.04 },
-    goo: { start: 0.1, duration: 1.2, ease: "power3.inOut", stretchEase: "power4.inOut", startScale: 0.15 },
-    recoil: -10, // px the initial card "pushes back" as the new card leaves it
-    reveal: { duration: 0.6, ease: "expo.out", stagger: 0.05 },
+    swap: { duration: 0.9, ease: "expo.out", stagger: 0.06 },
+    // ease drives travel + width together (back.out gives the overshoot); stretchEase grows height.
+    // snapAt/snapDuration collapse the blur while the overshoot pulls the cards furthest apart
+    goo: {
+      start: 0,
+      duration: 0.8,
+      ease: "back.out(1.7)",
+      stretchEase: "power3.out",
+      startScale: 0,
+      snapAt: 0.36, // keep snapAt/snapDuration in proportion to duration so the snap stays at peak overshoot
+      snapDuration: 0.32,
+    },
+    reveal: { offset: 0.1, duration: 0.9, ease: "expo.out", stagger: 0.06 }, // offset: seconds after the right card starts fading in
   };
 
   const hero = document.querySelector("[data-home-hero]");
@@ -1738,9 +1752,24 @@ function initCardSplit() {
   const current = masks.map((m) => m.children[0]).filter(Boolean);
   const next = masks.map((m) => m.children[1]).filter(Boolean);
 
+  // Right card reveals through its own masks; anything unmasked (the fee note) just fades up
+  const rightMasked = [...right.querySelectorAll("[data-split-mask]")].map((m) => m.firstElementChild).filter(Boolean);
+  const rightRest = [...right.children].filter((c) => !c.matches("[data-split-mask]") && !c.querySelector("[data-split-mask]"));
+
   const goo = hero.querySelector("[data-split-goo]");
   const blobs = goo ? [...goo.querySelectorAll("[data-split-blob]")] : [];
   const blurEl = document.querySelector("#card-goo feGaussianBlur");
+  const matrixEl = document.querySelector("#card-goo feColorMatrix");
+
+  // Each card can have its own magnet layer (see initCardFloat). Only layers inside the goo's
+  // stage count; anything above it moves the goo too, so it needs no compensation
+  const stage = goo?.parentElement.closest("[data-card-float]") || goo?.parentElement;
+  const magnetFor = (card) => {
+    const m = card.closest("[data-card-magnet]");
+    return m && stage?.contains(m) && m !== stage ? m : null;
+  };
+  const initialMagnet = magnetFor(initial);
+  const rightMagnet = magnetFor(right);
 
   const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const useGoo = !reduceMotion && goo && blobs.length === 2 && blurEl;
@@ -1753,7 +1782,11 @@ function initCardSplit() {
   gsap.set(right, { autoAlpha: 0 });
 
   /* ---------- Intro ---------- */
-  const intro = gsap.timeline({ delay: CONFIG.intro.delay });
+  // cardsplit:ready lets the magnet measure the card at its resting position, not mid-intro
+  const intro = gsap.timeline({
+    delay: CONFIG.intro.delay,
+    onComplete: () => hero.dispatchEvent(new CustomEvent("cardsplit:ready")),
+  });
   if (reduceMotion) {
     intro.set(initial, { autoAlpha: 1 });
   } else {
@@ -1796,6 +1829,8 @@ function initCardSplit() {
       transformOrigin: "center center",
     });
     gsap.set(blurEl, { attr: { stdDeviation: CONFIG.blur } });
+    const c = CONFIG.contrast;
+    matrixEl?.setAttribute("values", `1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 ${c} ${-c / 2}`);
   };
 
   /* ---------- Split ---------- */
@@ -1807,7 +1842,8 @@ function initCardSplit() {
 
     const hadFocus = triggerWrap.contains(document.activeElement);
     const offset = getOffset();
-    gsap.set(right, { x: offset });
+    // Offset via `left` so x/y stay free for the right card's own magnet
+    gsap.set(right, { left: offset });
 
     current.forEach((el) => (el.inert = true));
     next.forEach((el) => (el.inert = false));
@@ -1824,7 +1860,27 @@ function initCardSplit() {
       return;
     }
 
-    const tl = gsap.timeline({ onComplete: done });
+    // The cards keep floating/magnetising during the split, so the blobs track them live.
+    // Blob A follows the initial card; blob B blends from the initial card's shift to the
+    // right card's as it travels, so it buds from one and lands under the other
+    const budX = initial.offsetWidth - right.offsetWidth / 2;
+    const heights = new Map([initialMagnet, rightMagnet].filter(Boolean).map((m) => [m, m.offsetHeight]));
+    const shift = (m) =>
+      m
+        ? {
+            x: gsap.getProperty(m, "x"),
+            y: gsap.getProperty(m, "y") + (gsap.getProperty(m, "yPercent") * heights.get(m)) / 100,
+          }
+        : { x: 0, y: 0 };
+    const syncBlobs = () => {
+      const a = shift(initialMagnet);
+      const b = shift(rightMagnet);
+      const p = gsap.utils.clamp(0, 1, (gsap.getProperty(blobs[1], "x") - budX) / (offset - budX || 1));
+      gsap.set(blobs[0], { left: PAD + a.x, top: PAD + a.y });
+      gsap.set(blobs[1], { left: PAD + a.x + (b.x - a.x) * p, top: PAD + a.y + (b.y - a.y) * p });
+    };
+
+    const tl = gsap.timeline({ onComplete: done, onUpdate: useGoo ? syncBlobs : null });
 
     // Each mask's pair moves together; masks stagger against each other
     masks.forEach((m, i) => {
@@ -1832,31 +1888,34 @@ function initCardSplit() {
     });
 
     const g = CONFIG.goo;
-    const revealAt = g.start + g.duration - 0.2;
+    // Crossfade once the overshoot has settled (within ~2px), so card and blob line up
+    const revealAt = g.start + g.duration - 0.1;
 
     if (useGoo) {
       sizeGoo(offset);
+      syncBlobs();
+      // Blob A sits still under the initial card so the neck always starts from its edge;
+      // only the spawning card (blob B) moves and overshoots
       tl.set(goo, { display: "block" }, 0)
-        // Blob A shadows the real card so the neck always starts from the card's edge
-        .to([initial, blobs[0]], { x: CONFIG.recoil, duration: 0.35, ease: "power2.out" }, g.start)
-        .to([initial, blobs[0]], { x: 0, duration: 0.9, ease: "elastic.out(1, 0.5)" }, g.start + 0.35)
-        // Growing while it travels keeps its trailing edge near the card, so the neck lives the whole trip.
-        // scaleY on a steeper ease makes the droplet stretch wide before it fills out.
+        // x and scaleX share one ease so the trailing edge stays glued to the card while the leading
+        // edge overshoots and springs back. scaleY on a slower ease stretches the droplet wide first
         .to(blobs[1], { x: offset, scaleX: 1, duration: g.duration, ease: g.ease }, g.start)
         .to(blobs[1], { scaleY: 1, duration: g.duration, ease: g.stretchEase }, g.start)
-        // Collapsing the blur snaps the neck — otherwise a small gap stays bridged forever
-        .to(blurEl, { attr: { stdDeviation: 0 }, duration: 0.4, ease: "power2.in" }, g.start + g.duration * 0.7);
+        // Collapsing the blur at peak separation snaps the neck, so it can't rejoin as the card settles back
+        .to(blurEl, { attr: { stdDeviation: 0 }, duration: g.snapDuration, ease: "power2.in" }, g.start + g.snapAt);
     } else {
-      tl.fromTo(right, { x: 0 }, { x: offset, duration: g.duration, ease: g.ease }, g.start);
+      tl.fromTo(right, { left: 0 }, { left: offset, duration: g.duration, ease: g.ease }, g.start);
     }
 
-    // Real card crossfades in over the blob (white on white), bringing its shadow and text
-    tl.to(right, { autoAlpha: 1, duration: 0.35, ease: "power1.out" }, revealAt)
-      .from(
-        right.children,
-        { y: "0.75rem", autoAlpha: 0, duration: CONFIG.reveal.duration, ease: CONFIG.reveal.ease, stagger: CONFIG.reveal.stagger },
-        revealAt
-      );
+    // Real card crossfades in over the blob (white on white) with its content hidden in the masks,
+    // then the content slides up row by row like the initial card's swap
+    const r = CONFIG.reveal;
+    const contentAt = revealAt + r.offset;
+    tl.set(rightMasked, { yPercent: 100 }, 0)
+      .set(rightRest, { autoAlpha: 0 }, 0)
+      .to(right, { autoAlpha: 1, duration: 0.35, ease: "power1.out" }, revealAt)
+      .to(rightMasked, { yPercent: 0, duration: r.duration, ease: r.ease, stagger: r.stagger }, contentAt)
+      .to(rightRest, { autoAlpha: 1, duration: r.duration, ease: r.ease }, contentAt + rightMasked.length * r.stagger);
 
     if (useGoo) tl.set(goo, { display: "none" });
   };
@@ -1868,35 +1927,56 @@ function initCardSplit() {
   window.addEventListener("resize", () => {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
-      if (isSplit) gsap.set(right, { x: getOffset() });
+      if (isSplit) gsap.set(right, { left: getOffset() });
     }, 150);
   });
 }
 
 /* ==========================================================================
    Card float + magnet — ambient motion on wrapper layers, independent of the split
+   --------------------------------------------------------------------------
+   Each [data-card-magnet] layer (one per card) bobs and magnetises on its own,
+   so the two cards never move in lockstep. The group only shares a gentle tilt.
    ========================================================================== */
 function initCardFloat() {
   const CONFIG = {
-    float: { y: 8, rotation: 1, durationY: 3.2, durationR: 4.6 },
-    magnet: { strength: 0.08, radius: 520, duration: 1, ease: "power3.out" },
+    // tilt is shared by the group; each card then bobs with its own period (durationY + index * stepY)
+    float: { rotation: 1, durationR: 4.6, y: 8, durationY: 3.2, stepY: 0.7 },
+    // strength: share of the cursor offset followed at full proximity; maxPull caps travel (px);
+    // falloff > 1 makes the pull fade faster with distance (1 = linear, so it stays strong across the section);
+    // stepDuration gives each card its own lag; minGap is the closest the cards may be pulled together (px)
+    magnet: { strength: 0.05, maxPull: 12, falloff: 1, duration: 1.2, stepDuration: 0.3, ease: "power3.out", minGap: 8 },
   };
 
   const hero = document.querySelector("[data-home-hero]");
-  const floatEl = hero?.querySelector("[data-card-float]");
-  const magnetEl = hero?.querySelector("[data-card-magnet]");
-  if (!hero || !floatEl) return;
+  if (!hero) return;
+  const floatEl = hero.querySelector("[data-card-float]");
+  const magnets = [...hero.querySelectorAll("[data-card-magnet]")];
+  if (!floatEl && !magnets.length) return;
 
   const mm = gsap.matchMedia();
 
   /* ---------- Float ---------- */
   mm.add("(prefers-reduced-motion: no-preference)", () => {
-    // Two loops with unrelated durations never visibly repeat
-    gsap.set(floatEl, { rotation: -CONFIG.float.rotation });
-    const loops = [
-      gsap.to(floatEl, { y: -CONFIG.float.y, duration: CONFIG.float.durationY, ease: "sine.inOut", yoyo: true, repeat: -1 }),
-      gsap.to(floatEl, { rotation: CONFIG.float.rotation, duration: CONFIG.float.durationR, ease: "sine.inOut", yoyo: true, repeat: -1 }),
-    ];
+    const f = CONFIG.float;
+    const loops = [];
+
+    if (floatEl) {
+      gsap.set(floatEl, { rotation: -f.rotation });
+      loops.push(gsap.to(floatEl, { rotation: f.rotation, duration: f.durationR, ease: "sine.inOut", yoyo: true, repeat: -1 }));
+    }
+
+    // The bob uses yPercent so it stacks with the magnet's x/y instead of fighting it
+    magnets.forEach((el, i) => {
+      const amp = (f.y / (el.offsetHeight || 1)) * 100;
+      const bob = gsap.fromTo(
+        el,
+        { yPercent: amp / 2 },
+        { yPercent: -amp / 2, duration: f.durationY + i * f.stepY, ease: "sine.inOut", yoyo: true, repeat: -1 }
+      );
+      bob.seek(i * 1.1); // start out of phase
+      loops.push(bob);
+    });
 
     // Zero idle cost once the hero is scrolled away
     const io = new IntersectionObserver(([entry]) => {
@@ -1908,40 +1988,84 @@ function initCardFloat() {
   });
 
   /* ---------- Magnet ---------- */
-  if (!magnetEl) return;
+  if (!magnets.length) return;
 
   mm.add("(hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)", () => {
-    const xTo = gsap.quickTo(magnetEl, "x", { duration: CONFIG.magnet.duration, ease: CONFIG.magnet.ease });
-    const yTo = gsap.quickTo(magnetEl, "y", { duration: CONFIG.magnet.duration, ease: CONFIG.magnet.ease });
-    let center = null;
+    const { strength, maxPull, falloff, duration, stepDuration, ease, minGap } = CONFIG.magnet;
 
-    // Centre of every visible card (so it re-centres on the pair after the split), in page coords
+    const items = magnets.map((el, i) => ({
+      el,
+      card: el.matches("[data-split-card]") ? el : el.querySelector("[data-split-card]") || el,
+      xTo: gsap.quickTo(el, "x", { duration: duration + i * stepDuration, ease }),
+      yTo: gsap.quickTo(el, "y", { duration: duration + i * stepDuration, ease }),
+      box: null,
+    }));
+    let reach = 1;
+    let measured = false;
+
+    // Each card's resting bounds in page coords (its magnet offset removed). Hidden cards — the right
+    // card before the split — get no box and stay put until re-measured on cardsplit:complete
     const measure = () => {
-      const rects = [...hero.querySelectorAll("[data-split-card]")]
-        .filter((c) => getComputedStyle(c).visibility !== "hidden")
-        .map((c) => c.getBoundingClientRect());
-      if (!rects.length) return;
-      const left = Math.min(...rects.map((r) => r.left));
-      const right = Math.max(...rects.map((r) => r.right));
-      const top = Math.min(...rects.map((r) => r.top));
-      const bottom = Math.max(...rects.map((r) => r.bottom));
-      center = {
-        x: (left + right) / 2 - gsap.getProperty(magnetEl, "x") + window.scrollX,
-        y: (top + bottom) / 2 - gsap.getProperty(magnetEl, "y") + window.scrollY,
-      };
+      items.forEach((item) => {
+        if (getComputedStyle(item.card).visibility === "hidden") {
+          item.box = null;
+          return;
+        }
+        const r = item.card.getBoundingClientRect();
+        const ox = window.scrollX - gsap.getProperty(item.el, "x");
+        const oy = window.scrollY - gsap.getProperty(item.el, "y");
+        item.box = { left: r.left + ox, right: r.right + ox, top: r.top + oy, bottom: r.bottom + oy };
+      });
+      // Pull fades to zero across the hero's longest side, so it's live anywhere inside the section
+      const heroRect = hero.getBoundingClientRect();
+      reach = Math.max(heroRect.width, heroRect.height);
+      measured = true;
     };
 
     const onMove = (e) => {
-      if (!center) measure();
-      const dx = e.pageX - center.x;
-      const dy = e.pageY - center.y;
-      const inRange = Math.hypot(dx, dy) < CONFIG.magnet.radius;
-      xTo(inRange ? dx * CONFIG.magnet.strength : 0);
-      yTo(inRange ? dy * CONFIG.magnet.strength : 0);
+      if (!measured) measure();
+      const active = items.filter((item) => item.box);
+
+      active.forEach((item) => {
+        const { box } = item;
+        // Direction from the card's centre, strength from the distance to its nearest edge (0 when over it)
+        const dx = e.pageX - (box.left + box.right) / 2;
+        const dy = e.pageY - (box.top + box.bottom) / 2;
+        const edgeX = Math.max(box.left - e.pageX, 0, e.pageX - box.right);
+        const edgeY = Math.max(box.top - e.pageY, 0, e.pageY - box.bottom);
+        const proximity = (1 - Math.min(Math.hypot(edgeX, edgeY) / reach, 1)) ** falloff;
+
+        const dist = Math.hypot(dx, dy) || 1;
+        const pull = Math.min(dist * strength, maxPull) * proximity;
+        item.tx = (dx / dist) * pull;
+        item.ty = (dy / dist) * pull;
+      });
+
+      // With the cursor between two side-by-side cards both lean into the gap; share out any
+      // excess so they stop minGap apart instead of overlapping
+      active
+        .slice()
+        .sort((a, b) => a.box.left - b.box.left)
+        .forEach((b, i, row) => {
+          const a = row[i - 1];
+          if (!a) return;
+          const excess = a.tx - b.tx - (b.box.left - a.box.right - minGap);
+          if (excess > 0) {
+            a.tx -= excess / 2;
+            b.tx += excess / 2;
+          }
+        });
+
+      active.forEach(({ xTo, yTo, tx, ty }) => {
+        xTo(tx);
+        yTo(ty);
+      });
     };
     const onLeave = () => {
-      xTo(0);
-      yTo(0);
+      items.forEach(({ xTo, yTo }) => {
+        xTo(0);
+        yTo(0);
+      });
     };
 
     let resizeTimer;
@@ -1953,6 +2077,7 @@ function initCardFloat() {
     hero.addEventListener("pointerenter", measure);
     hero.addEventListener("pointermove", onMove);
     hero.addEventListener("pointerleave", onLeave);
+    hero.addEventListener("cardsplit:ready", measure);
     hero.addEventListener("cardsplit:complete", measure);
     window.addEventListener("resize", onResize);
 
@@ -1960,6 +2085,7 @@ function initCardFloat() {
       hero.removeEventListener("pointerenter", measure);
       hero.removeEventListener("pointermove", onMove);
       hero.removeEventListener("pointerleave", onLeave);
+      hero.removeEventListener("cardsplit:ready", measure);
       hero.removeEventListener("cardsplit:complete", measure);
       window.removeEventListener("resize", onResize);
     };
