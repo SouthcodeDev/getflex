@@ -448,11 +448,14 @@ function initGlobalParallax() {
     (id) => document.querySelector(`[data-burger-line='${id}']`)
   );
 
-  // Flag the nav once the page leaves the top, clear it when back at the top
+  // Flag the nav once the page leaves the top, clear it when back at the top.
+  // Desktop only — matchMedia kills the trigger and strips the class below 992px
   const navContainer = document.querySelector("[data-nav-container]");
   if (navContainer) {
-    ScrollTrigger.create({
-      onUpdate: (self) => navContainer.classList.toggle("is-scrolled", self.scroll() > 128),
+    gsap.matchMedia().add("(min-width: 992px)", () => {
+      const setScrolled = (self) => navContainer.classList.toggle("is-scrolled", self.scroll() > 128);
+      ScrollTrigger.create({ onUpdate: setScrolled, onRefresh: setScrolled });
+      return () => navContainer.classList.remove("is-scrolled");
     });
   }
 
