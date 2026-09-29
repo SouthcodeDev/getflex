@@ -2126,7 +2126,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.fonts.ready.then(() => {
     initFOUC();
-    initScrollAnimations();
+    // initScrollAnimations();
     initLoadAnimations();
     initTextSplit();
   })
