@@ -1725,6 +1725,7 @@ function initCalculators() {
    ========================================================================== */
 function initCardSplit() {
   const CONFIG = {
+    autoSplit: 2.5, // seconds after load before the card splits on its own
     gap: 24, // px between the two cards once split
     // Goo reach: the neck can bridge a gap of roughly 1.35 × blur, so keep blur above (gap + overshoot) / 1.35
     // or it tears on its own before the snap. Contrast sharpens the edge; its threshold is fixed at 0.5 so the
@@ -1753,11 +1754,8 @@ function initCardSplit() {
 
   const initial = hero.querySelector('[data-split-card="initial"]');
   const right = hero.querySelector('[data-split-card="right"]');
-  const triggerWrap = initial?.querySelector("[data-split-trigger]");
-  if (!initial || !right || !triggerWrap) return;
+  if (!initial || !right) return;
 
-  // Trigger lives inside a Webflow component, so the attribute sits on its wrapper
-  const trigger = triggerWrap.querySelector("a, button") || triggerWrap;
   const bounds = hero.querySelector("[data-split-bounds]") || hero;
   const masks = [...initial.querySelectorAll("[data-split-mask]")];
   const current = masks.map((m) => m.children[0]).filter(Boolean);
@@ -1845,13 +1843,12 @@ function initCardSplit() {
   };
 
   /* ---------- Split ---------- */
-  const split = (e) => {
-    e.preventDefault();
+  const split = () => {
     if (isSplit) return;
     isSplit = true;
     intro.progress(1);
 
-    const hadFocus = triggerWrap.contains(document.activeElement);
+    const hadFocus = current.some((el) => el.contains(document.activeElement));
     const offset = getOffset();
     // Offset via `left` so x/y stay free for the right card's own magnet
     gsap.set(right, { left: offset });
@@ -1931,7 +1928,7 @@ function initCardSplit() {
     if (useGoo) tl.set(goo, { display: "none" });
   };
 
-  trigger.addEventListener("click", split);
+  gsap.delayedCall(CONFIG.autoSplit, split);
 
   // Keep the split layout valid across resizes
   let resizeTimer;
