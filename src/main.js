@@ -1005,8 +1005,8 @@ function initGlobalParallax() {
     squashDown: 0.15,
     squashBack: 0.45,
     overshoot: 8,
-    cardSquash: 0.2,
-    cardInflate: 0.45,
+    cardSquash: 0,
+    cardInflate: 0,
   };
 
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
