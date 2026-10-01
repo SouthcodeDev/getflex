@@ -1397,6 +1397,14 @@ function initSwipers() {
         autoHeight: true,
       },
     },
+    steps: {
+      media: '(max-width: 991px)',
+      options: {
+        slidesPerView: 1.125,
+        spaceBetween: 16,
+        grabCursor: true,
+      },
+    },
   };
 
   document.querySelectorAll('[data-swiper]').forEach((container) => {
@@ -2593,5 +2601,6 @@ document.addEventListener('DOMContentLoaded', () => {
     initTextSplit();
     gsap.delayedCall(0.5, () => {
       ScrollTrigger.refresh();
+      lenis.resize();
     });
   })
