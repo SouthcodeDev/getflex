@@ -1,0 +1,23 @@
+<style>
+  /* Hide before JS runs to avoid a flash (w-mod-js is added by Webflow in <head>) */
+  .w-mod-js:not(.wf-design-mode) [data-split-card] { visibility: hidden; }
+  .payment-card_float { position: relative; }
+  /* The right card is in normal flow; it needs positioning for its z-index and the left/top offsets JS gives it */
+  [data-split-card="right"] { position: relative; }
+  /* The initial card's layer sits over the right card so the seam glows over both pieces at the cut */
+  .home-hero_payment-card-above-wrap { z-index: 5; }
+  /* The cut: JS sets its top to the gap above the amount and draws it out from the centre */
+  [data-split-seam] {
+    position: absolute;
+    z-index: 1;
+    top: 0;
+    left: -0.5rem;
+    right: -0.5rem;
+    height: 3px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, transparent, var(--_colors---base-new--active-green-500) 18%, var(--_colors---base-new--active-green-500) 82%, transparent);
+    box-shadow: 0 0 1.4rem color-mix(in srgb, var(--_colors---base-new--active-green-500) 85%, transparent);
+    pointer-events: none;
+    visibility: hidden;
+  }
+</style>

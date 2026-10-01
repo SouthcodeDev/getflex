@@ -1721,32 +1721,34 @@ function initCalculators() {
 }
 
 /* ==========================================================================
-   Card split — hero payment card splits into two with a gooey "birth"
+   Card split — the Split button is pressed, a seam is drawn through the card,
+   and it tears into two pieces that pull apart and each grow back into a card
+   --------------------------------------------------------------------------
+   The tear is two real cards, not clones: once the amount and button rows have
+   rolled to their halves, the initial card's lower half matches the right card's,
+   so at the cut the initial card is clipped to the top piece and the right card,
+   laid exactly over it, to the bottom piece. Neither clip then opens back up.
    ========================================================================== */
 function initCardSplit() {
   const CONFIG = {
-    autoSplit: 2.5, // seconds after load before the card splits on its own
-    gap: 24, // px between the two cards once split
-    // Goo reach: the neck can bridge a gap of roughly 1.35 × blur, so keep blur above (gap + overshoot) / 1.35
-    // or it tears on its own before the snap. Contrast sharpens the edge; its threshold is fixed at 0.5 so the
-    // goo never grows past the card's edge (a lower threshold shows a rim around the initial card).
-    // Both are written to the SVG filter by JS, so the embed's values don't matter
-    blur: 22,
-    contrast: 40,
+    autoSplit: 2.5, // seconds after load before the card splits on its own; clicking [data-split-trigger] splits sooner
+    color: "--_colors---base-new--active-green-500", // pressed button (the seam's colour is set in the embed CSS)
     intro: { delay: 0.375, duration: 1.2, ease: "expo.out", y: "3rem", scale: 0.96 },
-    swap: { duration: 0.9, ease: "expo.out", stagger: 0.06 },
-    // ease drives travel + width together (back.out gives the overshoot); stretchEase grows height.
-    // snapAt/snapDuration collapse the blur while the overshoot pulls the cards furthest apart
-    goo: {
-      start: 0,
-      duration: 0.8,
-      ease: "back.out(1.7)",
-      stretchEase: "power3.out",
-      startScale: 0,
-      snapAt: 0.36, // keep snapAt/snapDuration in proportion to duration so the snap stays at peak overshoot
-      snapDuration: 0.32,
-    },
-    reveal: { offset: 0.1, duration: 0.9, ease: "expo.out", stagger: 0.06 }, // offset: seconds after the right card starts fading in
+    // Times below are seconds from the trigger. The card squeezes a touch with the button press
+    press: { at: 0, duration: 0.12, scale: 0.93, squeeze: 0.985, text: "--_colors---base-new--dark-900" },
+    // Rows below the seam (amount, button) roll to their halves before the cut; rows above roll on the top piece after it
+    swap: { at: 0.125, duration: 0.9, ease: "expo.out", stagger: 0.06 },
+    seam: { at: 0.125, duration: 0.45, ease: "expo.out", fade: 0.5 }, // fade: seconds it takes to fade out after the cut
+    cutAt: 0.5, // keep this after the lower rows have settled, or they visibly jump when the bottom piece takes over
+    // Final stack: the top card rises by lift × (its height + gap) and the bottom card drops by the rest,
+    // so lift 1 keeps the bottom card where the original sat and 0.5 centres the pair on it.
+    // x (px) staggers them sideways so they don't sit in line. Mind the gap against rotation, bob and magnet pull
+    stack: { gap: 28, lift: 1, top: { x: -16, rotation: -3 }, bottom: { x: 24, rotation: 2 } },
+    // part pulls the pieces apart (back.out gives the snap); heal grows each back to a full card, starting later
+    // and running slower so a gap tears open first. heal must never get ahead of part or the pieces overlap
+    part: { duration: 1.1, ease: "back.out(1.4)" },
+    heal: { delay: 0, duration: 0.9, ease: "power3.inOut" },
+    reveal: { offset: 0.35, duration: 0.7, ease: "expo.out", stagger: 0.06, y: "0.75rem" }, // offset: seconds after the cut
   };
 
   const hero = document.querySelector("[data-home-hero]");
@@ -1756,34 +1758,23 @@ function initCardSplit() {
   const right = hero.querySelector('[data-split-card="right"]');
   if (!initial || !right) return;
 
-  const bounds = hero.querySelector("[data-split-bounds]") || hero;
+  const seam = hero.querySelector("[data-split-seam]");
+  const trigger = initial.querySelector("[data-split-trigger]");
+  const button = trigger?.querySelector("a, button");
   const masks = [...initial.querySelectorAll("[data-split-mask]")];
   const current = masks.map((m) => m.children[0]).filter(Boolean);
   const next = masks.map((m) => m.children[1]).filter(Boolean);
 
-  // Right card reveals through its own masks; anything unmasked (the fee note) just fades up
-  const rightMasked = [...right.querySelectorAll("[data-split-mask]")].map((m) => m.firstElementChild).filter(Boolean);
-  const rightRest = [...right.children].filter((c) => !c.matches("[data-split-mask]") && !c.querySelector("[data-split-mask]"));
-
-  const goo = hero.querySelector("[data-split-goo]");
-  const blobs = goo ? [...goo.querySelectorAll("[data-split-blob]")] : [];
-  const blurEl = document.querySelector("#card-goo feGaussianBlur");
-  const matrixEl = document.querySelector("#card-goo feColorMatrix");
-
-  // Each card can have its own magnet layer (see initCardFloat). Only layers inside the goo's
-  // stage count; anything above it moves the goo too, so it needs no compensation
-  const stage = goo?.parentElement.closest("[data-card-float]") || goo?.parentElement;
-  const magnetFor = (card) => {
-    const m = card.closest("[data-card-magnet]");
-    return m && stage?.contains(m) && m !== stage ? m : null;
-  };
-  const initialMagnet = magnetFor(initial);
-  const rightMagnet = magnetFor(right);
+  // Each card can have its own magnet layer (see initCardFloat); the bottom piece is
+  // compensated for the difference so it lines up with the top piece at the cut
+  const initialMagnet = initial.closest("[data-card-magnet]");
+  const rightMagnet = right.closest("[data-card-magnet]");
 
   const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const useGoo = !reduceMotion && goo && blobs.length === 2 && blurEl;
+  const cssVar = (name) => getComputedStyle(hero).getPropertyValue(name).trim();
 
   let isSplit = false;
+  let settled = false;
 
   // Duplicates stay out of the tab order / screen readers until swapped in
   next.forEach((el) => (el.inert = true));
@@ -1809,133 +1800,167 @@ function initCardSplit() {
   }
 
   /* ---------- Layout helpers ---------- */
-  // Ideal offset puts the new card beside the first; clamp so it never leaves the container
-  const getOffset = () => {
-    const room = bounds.getBoundingClientRect().right - initial.getBoundingClientRect().left - right.offsetWidth;
-    return Math.max(0, Math.min(initial.offsetWidth + CONFIG.gap, room));
+  // Resting stack. The initial card moves by its own transform; the right card is its own magnet
+  // layer, so it's offset by left/top to keep x/y free for the magnet
+  const layout = () => {
+    const { gap, lift, top, bottom } = CONFIG.stack;
+    const travel = initial.offsetHeight + gap;
+    return {
+      top: { x: top.x, y: -travel * lift, rotation: top.rotation },
+      bottom: { left: bottom.x, top: travel * (1 - lift), rotation: bottom.rotation },
+    };
   };
 
-  // The filter only paints ~10% past its element, so the goo layer is padded to cover the whole trip
-  const PAD = CONFIG.blur * 4;
-  const sizeGoo = (offset) => {
-    const w = initial.offsetWidth;
-    const h = initial.offsetHeight;
-    gsap.set(goo, {
-      top: -PAD,
-      left: -PAD,
-      width: offset + Math.max(w, right.offsetWidth) + PAD * 2,
-      height: Math.max(h, right.offsetHeight) + PAD * 2,
-    });
-    gsap.set(blobs[0], { top: PAD, left: PAD, width: w, height: h, x: 0 });
-    // Blob B is "budded" as a droplet centred on the initial card's right edge
-    gsap.set(blobs[1], {
-      top: PAD,
-      left: PAD,
-      width: right.offsetWidth,
-      height: right.offsetHeight,
-      x: w - right.offsetWidth / 2,
-      scale: CONFIG.goo.startScale,
-      transformOrigin: "center center",
-    });
-    gsap.set(blurEl, { attr: { stdDeviation: CONFIG.blur } });
-    const c = CONFIG.contrast;
-    matrixEl?.setAttribute("values", `1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 ${c} ${-c / 2}`);
+  // The cut runs through the gap above the first row that sits directly in the card (the amount),
+  // since everything from there down matches between the two cards once the rows have rolled
+  const getSeamY = () => {
+    const box = initial.getBoundingClientRect();
+    const row = masks.find((m) => m.parentElement === initial);
+    const above = row?.previousElementSibling;
+    if (!above) return box.height / 2;
+    return (above.getBoundingClientRect().bottom + row.getBoundingClientRect().top) / 2 - box.top;
   };
+
+  let heights;
+  const shift = (m) =>
+    m
+      ? {
+          x: gsap.getProperty(m, "x"),
+          y: gsap.getProperty(m, "y") + (gsap.getProperty(m, "yPercent") * heights.get(m)) / 100,
+        }
+      : { x: 0, y: 0 };
 
   /* ---------- Split ---------- */
   const split = () => {
     if (isSplit) return;
     isSplit = true;
+    autoSplit.kill();
     intro.progress(1);
 
     const hadFocus = current.some((el) => el.contains(document.activeElement));
-    const offset = getOffset();
-    // Offset via `left` so x/y stay free for the right card's own magnet
-    gsap.set(right, { left: offset });
-
     current.forEach((el) => (el.inert = true));
     next.forEach((el) => (el.inert = false));
     if (hadFocus) next.map((el) => el.querySelector("a, button")).find(Boolean)?.focus({ preventScroll: true });
 
+    const end = layout();
     const done = () => {
+      settled = true;
       right.inert = false;
+      gsap.set([initial, right], { clearProps: "clipPath" });
       hero.dispatchEvent(new CustomEvent("cardsplit:complete"));
     };
 
     if (reduceMotion) {
       masks.forEach((m) => gsap.set(m.children, { yPercent: -100 }));
+      gsap.set(initial, end.top);
+      gsap.set(right, end.bottom);
       gsap.to(right, { autoAlpha: 1, duration: 0.3, onComplete: done });
       return;
     }
 
-    // The cards keep floating/magnetising during the split, so the blobs track them live.
-    // Blob A follows the initial card; blob B blends from the initial card's shift to the
-    // right card's as it travels, so it buds from one and lands under the other
-    const budX = initial.offsetWidth - right.offsetWidth / 2;
-    const heights = new Map([initialMagnet, rightMagnet].filter(Boolean).map((m) => [m, m.offsetHeight]));
-    const shift = (m) =>
-      m
-        ? {
-            x: gsap.getProperty(m, "x"),
-            y: gsap.getProperty(m, "y") + (gsap.getProperty(m, "yPercent") * heights.get(m)) / 100,
-          }
-        : { x: 0, y: 0 };
-    const syncBlobs = () => {
+    heights = new Map([initialMagnet, rightMagnet].filter(Boolean).map((m) => [m, m.offsetHeight]));
+    const ih = initial.offsetHeight;
+    const seamY = getSeamY();
+    const lowered = ih - right.offsetHeight; // bottom-align the right card so its lower rows sit on the initial's
+    const rightSeamY = seamY - lowered;
+    const isBelow = (el, box, line) => el.getBoundingClientRect().top - box.top >= line;
+    const initialBox = initial.getBoundingClientRect();
+    const rightBox = right.getBoundingClientRect();
+    // Only the right card's rows above the cut are new; the ones below are the bottom piece itself
+    const reveal = [...right.children].filter((el) => !isBelow(el, rightBox, rightSeamY));
+
+    // Clip-path insets reach well past the card on the uncut sides so its shadow isn't clipped
+    const OUT = -320;
+    const clip = (t, b) => `inset(${t}px ${OUT}px ${b}px ${OUT}px)`;
+
+    // The right card starts over the initial (in the initial's magnet frame) and blends into its own
+    // spot as it travels, so it tears off one card and lands as the other
+    const travel = { p: 0 };
+    const placeRight = () => {
       const a = shift(initialMagnet);
       const b = shift(rightMagnet);
-      const p = gsap.utils.clamp(0, 1, (gsap.getProperty(blobs[1], "x") - budX) / (offset - budX || 1));
-      gsap.set(blobs[0], { left: PAD + a.x, top: PAD + a.y });
-      gsap.set(blobs[1], { left: PAD + a.x + (b.x - a.x) * p, top: PAD + a.y + (b.y - a.y) * p });
+      const p = travel.p;
+      gsap.set(right, {
+        left: (a.x - b.x) * (1 - p) + end.bottom.left * p,
+        top: (lowered + a.y - b.y) * (1 - p) + end.bottom.top * p,
+      });
     };
 
-    const tl = gsap.timeline({ onComplete: done, onUpdate: useGoo ? syncBlobs : null });
+    const tl = gsap.timeline({ onComplete: done });
+    const { press, swap, part, heal } = CONFIG;
 
-    // Each mask's pair moves together; masks stagger against each other
-    masks.forEach((m, i) => {
-      tl.to(m.children, { yPercent: -100, duration: CONFIG.swap.duration, ease: CONFIG.swap.ease }, i * CONFIG.swap.stagger);
-    });
+    // Press — the cut reads as the button's result, not something that just happens to the card
+    if (button) {
+      tl.to(
+        button,
+        { scale: press.scale, backgroundColor: cssVar(CONFIG.color), color: cssVar(press.text), duration: press.duration, ease: "power2.out" },
+        press.at
+      ).to(button, { scale: 1, duration: 0.4, ease: "back.out(3)" }, press.at + press.duration);
+    }
+    tl.to(initial, { scale: press.squeeze, duration: press.duration, ease: "power2.out" }, press.at).to(
+      initial,
+      { scale: 1, duration: 0.4, ease: "power3.out" },
+      press.at + press.duration
+    );
 
-    const g = CONFIG.goo;
-    // Crossfade once the overshoot has settled (within ~2px), so card and blob line up
-    const revealAt = g.start + g.duration - 0.1;
+    // Rows roll to their halves: the lower ones before the cut, the upper ones on the top piece after it
+    const lower = masks.filter((m) => isBelow(m, initialBox, seamY));
+    const upper = masks.filter((m) => !lower.includes(m));
+    lower.forEach((m, i) =>
+      tl.to(m.children, { yPercent: -100, duration: swap.duration, ease: swap.ease }, swap.at + i * swap.stagger)
+    );
+    upper.forEach((m, i) =>
+      tl.to(m.children, { yPercent: -100, duration: swap.duration, ease: swap.ease }, CONFIG.cutAt + 0.05 + i * swap.stagger)
+    );
 
-    if (useGoo) {
-      sizeGoo(offset);
-      syncBlobs();
-      // Blob A sits still under the initial card so the neck always starts from its edge;
-      // only the spawning card (blob B) moves and overshoots
-      tl.set(goo, { display: "block" }, 0)
-        // x and scaleX share one ease so the trailing edge stays glued to the card while the leading
-        // edge overshoots and springs back. scaleY on a slower ease stretches the droplet wide first
-        .to(blobs[1], { x: offset, scaleX: 1, duration: g.duration, ease: g.ease }, g.start)
-        .to(blobs[1], { scaleY: 1, duration: g.duration, ease: g.stretchEase }, g.start)
-        // Collapsing the blur at peak separation snaps the neck, so it can't rejoin as the card settles back
-        .to(blurEl, { attr: { stdDeviation: 0 }, duration: g.snapDuration, ease: "power2.in" }, g.start + g.snapAt);
-    } else {
-      tl.fromTo(right, { left: 0 }, { left: offset, duration: g.duration, ease: g.ease }, g.start);
+    // Seam
+    if (seam) {
+      const host = seam.offsetParent || seam.parentElement;
+      const top = initialBox.top - host.getBoundingClientRect().top + seamY;
+      tl.fromTo(
+        seam,
+        { top, yPercent: -50, scaleX: 0, autoAlpha: 1 },
+        { scaleX: 1, duration: CONFIG.seam.duration, ease: CONFIG.seam.ease },
+        CONFIG.seam.at
+      ).to(seam, { autoAlpha: 0, duration: CONFIG.seam.fade, ease: "power2.out" }, CONFIG.cutAt);
     }
 
-    // Real card crossfades in over the blob (white on white) with its content hidden in the masks,
-    // then the content slides up row by row like the initial card's swap
-    const r = CONFIG.reveal;
-    const contentAt = revealAt + r.offset;
-    tl.set(rightMasked, { yPercent: 100 }, 0)
-      .set(rightRest, { autoAlpha: 0 }, 0)
-      .to(right, { autoAlpha: 1, duration: 0.35, ease: "power1.out" }, revealAt)
-      .to(rightMasked, { yPercent: 0, duration: r.duration, ease: r.ease, stagger: r.stagger }, contentAt)
-      .to(rightRest, { autoAlpha: 1, duration: r.duration, ease: r.ease }, contentAt + rightMasked.length * r.stagger);
-
-    if (useGoo) tl.set(goo, { display: "none" });
+    // Cut — on one frame the initial becomes the top piece and the right card the bottom piece
+    const cut = CONFIG.cutAt;
+    tl.set(reveal, { autoAlpha: 0, y: CONFIG.reveal.y }, 0)
+      .set(initial, { clipPath: clip(OUT, ih - seamY) }, cut)
+      .set(right, { clipPath: clip(rightSeamY, OUT), autoAlpha: 1 }, cut)
+      .call(placeRight, null, cut)
+      // Part
+      .to(initial, { ...end.top, duration: part.duration, ease: part.ease }, cut)
+      .to(right, { rotation: end.bottom.rotation, duration: part.duration, ease: part.ease }, cut)
+      .to(travel, { p: 1, duration: part.duration, ease: part.ease, onUpdate: placeRight }, cut)
+      // Heal
+      .to(initial, { clipPath: clip(OUT, 0), duration: heal.duration, ease: heal.ease }, cut + heal.delay)
+      .to(right, { clipPath: clip(0, OUT), duration: heal.duration, ease: heal.ease }, cut + heal.delay)
+      // The right card's own header comes in as its top grows back
+      .to(
+        reveal,
+        { autoAlpha: 1, y: 0, duration: CONFIG.reveal.duration, ease: CONFIG.reveal.ease, stagger: CONFIG.reveal.stagger },
+        cut + CONFIG.reveal.offset
+      );
   };
 
-  gsap.delayedCall(CONFIG.autoSplit, split);
+  const autoSplit = gsap.delayedCall(CONFIG.autoSplit, split);
+  trigger?.addEventListener("click", (e) => {
+    e.preventDefault();
+    split();
+  });
 
-  // Keep the split layout valid across resizes
+  // Keep the stack valid across resizes (heights change with the type)
   let resizeTimer;
   window.addEventListener("resize", () => {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
-      if (isSplit) gsap.set(right, { left: getOffset() });
+      if (!settled) return;
+      const end = layout();
+      gsap.set(initial, { y: end.top.y });
+      gsap.set(right, { top: end.bottom.top });
     }, 150);
   });
 }
@@ -2049,20 +2074,24 @@ function initCardFloat() {
         item.ty = (dy / dist) * pull;
       });
 
-      // With the cursor between two side-by-side cards both lean into the gap; share out any
-      // excess so they stop minGap apart instead of overlapping
-      active
-        .slice()
-        .sort((a, b) => a.box.left - b.box.left)
-        .forEach((b, i, row) => {
-          const a = row[i - 1];
-          if (!a) return;
-          const excess = a.tx - b.tx - (b.box.left - a.box.right - minGap);
-          if (excess > 0) {
-            a.tx -= excess / 2;
-            b.tx += excess / 2;
-          }
-        });
+      // With the cursor between two cards both lean into the gap; share out any excess so they
+      // stop minGap apart instead of overlapping. Per axis, only for cards that are apart along it
+      // (side by side for x, stacked for y)
+      const separate = (start, end, t) =>
+        active
+          .slice()
+          .sort((a, b) => a.box[start] - b.box[start])
+          .forEach((b, i, row) => {
+            const a = row[i - 1];
+            if (!a || b.box[start] < a.box[end]) return;
+            const excess = a[t] - b[t] - (b.box[start] - a.box[end] - minGap);
+            if (excess > 0) {
+              a[t] -= excess / 2;
+              b[t] += excess / 2;
+            }
+          });
+      separate("left", "right", "tx");
+      separate("top", "bottom", "ty");
 
       active.forEach(({ xTo, yTo, tx, ty }) => {
         xTo(tx);
