@@ -1445,8 +1445,8 @@ function initCalculators() {
     },
     // amount = default when the bill is selected; min/max/step drive the slider
     bills: {
-      rent:      { label: "Rent",        amount: 1400, min: 500, max: 5000, step: 10, membership: true },
-      mortgage:  { label: "Mortgage",    amount: 2400, min: 500, max: 6000, step: 10 },
+      rent:      { label: "Rent",        amount: 1400, min: 600, max: 4000, step: 10, membership: true },
+      mortgage:  { label: "Mortgage",    amount: 2400, min: 600, max: 4000, step: 10 },
       car:       { label: "Car payment", amount: 480,  min: 100, max: 1500, step: 10 },
       utilities: { label: "Utilities",   amount: 300,  min: 50,  max: 1000, step: 10 },
       childcare: { label: "Childcare",   amount: 400,  min: 100, max: 2500, step: 10 },
