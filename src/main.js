@@ -452,11 +452,11 @@ function initGlobalParallax() {
   // Desktop only — matchMedia kills the trigger and strips the class below 992px
   const navContainer = document.querySelector("[data-nav-container]");
   if (navContainer) {
-    gsap.matchMedia().add("(min-width: 992px)", () => {
+    // gsap.matchMedia().add("(min-width: 992px)", () => {
       const setScrolled = (self) => navContainer.classList.toggle("is-scrolled", self.scroll() > 128);
       ScrollTrigger.create({ onUpdate: setScrolled, onRefresh: setScrolled });
-      return () => navContainer.classList.remove("is-scrolled");
-    });
+      navContainer.classList.remove("is-scrolled");
+    // });
   }
 
   // State
