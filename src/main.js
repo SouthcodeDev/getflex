@@ -1744,7 +1744,7 @@ function initCardSplit() {
     // Final stack: the top card rises by lift × (its height + gap) and the bottom card drops by the rest,
     // so lift 1 keeps the bottom card where the original sat and 0.5 centres the pair on it.
     // x (px) staggers them sideways so they don't sit in line. Mind the gap against rotation, bob and magnet pull
-    stack: { gap: 28, lift: 1, top: { x: -16, rotation: -3 }, bottom: { x: 24, rotation: 2 } },
+    stack: { gap: 0, lift: 1, top: { x: -16, rotation: -3 }, bottom: { x: 24, rotation: 2 } },
     // part pulls the pieces apart (back.out gives the snap); heal grows each back to a full card, starting later
     // and running slower so a gap tears open first. heal must never get ahead of part or the pieces overlap
     part: { duration: 1.1, ease: "back.out(1.4)" },
