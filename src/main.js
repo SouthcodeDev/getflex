@@ -2143,7 +2143,7 @@ function initNumberOdometer() {
     digitStagger: 0.04,
     revealDuration: 0.5,
     revealEase: 'power2.out',
-    triggerStart: 'top 80%',
+    triggerStart: 'top bottom',
     staggerOrder: 'left',
     digitCycles: 2
   }
@@ -2192,9 +2192,12 @@ function initNumberOdometer() {
     // Play on enter; reset only once the group is fully below the viewport again
     ScrollTrigger.create({
       trigger: group,
-      start: `clamp(${triggerStart})`, // clamp: above-the-fold groups fire on load without a scroll
+      start: triggerStart,
+      markers: true,
       onEnter: () => tl.play()
     })
+    // onEnter needs a scroll past start, so groups already on screen at load play directly
+    if (ScrollTrigger.isInViewport(group)) tl.play()
     ScrollTrigger.create({
       trigger: group,
       start: 'top bottom',
