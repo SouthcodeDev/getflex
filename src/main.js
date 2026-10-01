@@ -1441,20 +1441,22 @@ function initCalculators() {
   const CONFIG = {
     fees: {
       processing: 0.005, // of the total bill, added to payment 1
-      split: 0.03,       // of the split (2nd) half, added to payment 2
+      split: 0.03,       // of the split amount (payment 2), added to payment 2
       membership: 5.99,  // flat, rent only, added to payment 1
     },
+    // Up to the threshold the bill splits 50/50; above it payment 2 is fixed and payment 1 takes the rest
+    split: { threshold: 4000, fixedSecond: 2000 },
     // amount = default when the bill is selected; min/max/step drive the slider
     bills: {
-      rent:      { label: "Rent",        amount: 1400, min: 600, max: 4000, step: 10, membership: true },
-      mortgage:  { label: "Mortgage",    amount: 2400, min: 600, max: 4000, step: 10 },
-      car:       { label: "Car payment", amount: 480,  min: 100, max: 1500, step: 10 },
-      utilities: { label: "Utilities",   amount: 300,  min: 50,  max: 1000, step: 10 },
-      childcare: { label: "Childcare",   amount: 400,  min: 100, max: 2500, step: 10 },
-      insurance: { label: "Insurance",   amount: 350,  min: 50,  max: 1500, step: 10 },
-      internet:  { label: "Internet",    amount: 250,  min: 25,  max: 500,  step: 5 },
-      tv:        { label: "TV",          amount: 250,  min: 25,  max: 500,  step: 5 },
-      phone:     { label: "Phone",       amount: 250,  min: 25,  max: 500,  step: 5 },
+      rent:      { label: "Rent",        amount: 1400, min: 600, max: 10000, step: 10, membership: true },
+      mortgage:  { label: "Mortgage",    amount: 2400, min: 10,  max: 5000,  step: 10 },
+      car:       { label: "Car payment", amount: 480,  min: 10,  max: 5000,  step: 10 },
+      utilities: { label: "Utilities",   amount: 300,  min: 10,  max: 5000,  step: 10 },
+      childcare: { label: "Childcare",   amount: 400,  min: 10,  max: 5000,  step: 10 },
+      insurance: { label: "Insurance",   amount: 350,  min: 10,  max: 5000,  step: 10 },
+      internet:  { label: "Internet",    amount: 250,  min: 10,  max: 5000,  step: 5 },
+      tv:        { label: "TV",          amount: 250,  min: 10,  max: 5000,  step: 5 },
+      phone:     { label: "Phone",       amount: 250,  min: 10,  max: 5000,  step: 5 },
     },
     // Bills available per page; the first one is the default. One bill = no dropdown.
     pages: {
@@ -1475,8 +1477,10 @@ function initCalculators() {
   // Work in integer cents so the two payments always add up exactly
   function calculate(total, bill) {
     const totalC = Math.round(total * 100);
-    const firstHalf = Math.round(totalC / 2);
-    const secondHalf = totalC - firstHalf;
+    const secondHalf = totalC > CONFIG.split.threshold * 100
+      ? CONFIG.split.fixedSecond * 100
+      : totalC - Math.round(totalC / 2);
+    const firstHalf = totalC - secondHalf;
     const processing = Math.round(totalC * CONFIG.fees.processing);
     const split = Math.round(secondHalf * CONFIG.fees.split);
     const membership = bill.membership ? Math.round(CONFIG.fees.membership * 100) : 0;
