@@ -2192,7 +2192,7 @@ function initNumberOdometer() {
     // Play on enter; reset only once the group is fully below the viewport again
     ScrollTrigger.create({
       trigger: group,
-      start: triggerStart,
+      start: `clamp(${triggerStart})`, // clamp: above-the-fold groups fire on load without a scroll
       onEnter: () => tl.play()
     })
     ScrollTrigger.create({
