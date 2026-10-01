@@ -2193,7 +2193,6 @@ function initNumberOdometer() {
     ScrollTrigger.create({
       trigger: group,
       start: triggerStart,
-      markers: true,
       onEnter: () => tl.play()
     })
     // onEnter needs a scroll past start, so groups already on screen at load play directly
