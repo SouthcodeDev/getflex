@@ -313,7 +313,7 @@ function initScrollAnimations() {
       scrollTrigger: {
         trigger: el,
         start: "top bottom",
-        end: "top 80%",
+        end: "top 90%",
         toggleActions: "none play none reset",
       },
     });
@@ -329,7 +329,7 @@ function initScrollAnimations() {
       scrollTrigger: {
         trigger: el,
         start: "top bottom",
-        end: "top 80%",
+        end: "top 90%",
         toggleActions: "none play none reset",
       },
     });
@@ -794,6 +794,11 @@ function initGlobalParallax() {
     menuWrap.setAttribute("data-menu-open", "true");
     burger.setAttribute("aria-expanded", "true");
     document.body.style.overflow = "hidden";
+
+    const dropdown = document.querySelector('[fc-dropdown-behavior]');
+    const dropdownToggle = dropdown.querySelector('.w-dropdown-toggle');
+      dropdownToggle.dispatchEvent(new Event('click'));
+
 
     const items = getNavItems();
     const tl = gsap.timeline();
@@ -1448,7 +1453,7 @@ function initCalculators() {
     split: { threshold: 4000, fixedSecond: 2000 },
     // amount = default when the bill is selected; min/max/step drive the slider
     bills: {
-      rent:      { label: "Rent",        amount: 1400, min: 600, max: 10000, step: 10, membership: true },
+      rent:      { label: "Rent",        amount: 1400, min: 600, max: 5000, step: 10, membership: true },
       mortgage:  { label: "Mortgage",    amount: 2400, min: 10,  max: 5000,  step: 10 },
       car:       { label: "Car payment", amount: 480,  min: 10,  max: 5000,  step: 10 },
       utilities: { label: "Utilities",   amount: 300,  min: 10,  max: 5000,  step: 10 },
@@ -2576,4 +2581,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initScrollAnimations();
     initLoadAnimations();
     initTextSplit();
+    gsap.delayedCall(0.5, () => {
+      ScrollTrigger.refresh();
+    });
   })
