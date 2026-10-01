@@ -1745,20 +1745,25 @@ function initCardSplit() {
     color: "--_colors---base-new--active-green-500", // pressed button (the seam's colour is set in the embed CSS)
     intro: { delay: 0.375, duration: 1.2, ease: "expo.out", y: "3rem", scale: 0.96 },
     // Times below are seconds from the trigger. The card squeezes a touch with the button press
-    press: { at: 0, duration: 0.12, scale: 0.93, squeeze: 0.985, text: "--_colors---base-new--dark-900" },
+    press: { at: 0, duration: 0.09, scale: 0.9, squeeze: 0.975, text: "--_colors---base-new--dark-900" },
     // Rows below the seam (amount, button) roll to their halves before the cut; rows above roll on the top piece after it
-    swap: { at: 0.125, duration: 0.9, ease: "expo.out", stagger: 0.06 },
-    seam: { at: 0.125, duration: 0.45, ease: "expo.out", fade: 0.5 }, // fade: seconds it takes to fade out after the cut
-    cutAt: 0.5, // keep this after the lower rows have settled, or they visibly jump when the bottom piece takes over
+    swap: { at: 0, duration: 0.25, ease: "expo.out", stagger: 0.03 },
+    // The seam is still drawing out to the edges when the cut lands, so the pieces part mid-stroke
+    seam: { at: 0.05, duration: 0.32, ease: "power2.out", fade: 0.35 }, // fade: seconds it takes to fade out once drawn
+    // The flash at the cut: the seam thickens and its bloom (the ::after in the embed CSS, driven by
+    // --split-flash) blazes for `peak` seconds, then both die back over `decay`
+    flash: { peak: 0.05, decay: 0.4, scaleY: 2.5 },
+    cutAt: 0.2, // keep this after the lower rows have settled, or they visibly jump when the bottom piece takes over
     // Final stack: the top card rises by lift × (its height + gap) and the bottom card drops by the rest,
     // so lift 1 keeps the bottom card where the original sat and 0.5 centres the pair on it.
     // x (px) staggers them sideways so they don't sit in line. Mind the gap against rotation, bob and magnet pull
     stack: { gap: 0, lift: 1, top: { x: -16, rotation: -3 }, bottom: { x: 24, rotation: 2 } },
     // part pulls the pieces apart (back.out gives the snap); heal grows each back to a full card, starting later
-    // and running slower so a gap tears open first. heal must never get ahead of part or the pieces overlap
-    part: { duration: 1.1, ease: "back.out(1.4)" },
-    heal: { delay: 0, duration: 0.9, ease: "power3.inOut" },
-    reveal: { offset: 0.35, duration: 0.7, ease: "expo.out", stagger: 0.06, y: "0.75rem" }, // offset: seconds after the cut
+    // and running slower so a gap tears open first. heal must never get ahead of part or the pieces overlap —
+    // the elastic dips back ~3% halfway through, so keep heal slow enough to stay behind it
+    part: { duration: 0.5, ease: "back.out" },
+    heal: { delay: 0, duration: 0.7, ease: "power3.inOut" },
+    reveal: { offset: 0.2, duration: 0.5, ease: "expo.out", stagger: 0.05, y: "0.75rem" }, // offset: seconds after the cut
   };
 
   const hero = document.querySelector("[data-home-hero]");
@@ -1905,11 +1910,11 @@ function initCardSplit() {
         button,
         { scale: press.scale, backgroundColor: cssVar(CONFIG.color), color: cssVar(press.text), duration: press.duration, ease: "power2.out" },
         press.at
-      ).to(button, { scale: 1, duration: 0.4, ease: "back.out(3)" }, press.at + press.duration);
+      ).to(button, { scale: 1, duration: 0.3, ease: "back.out(3)" }, press.at + press.duration);
     }
     tl.to(initial, { scale: press.squeeze, duration: press.duration, ease: "power2.out" }, press.at).to(
       initial,
-      { scale: 1, duration: 0.4, ease: "power3.out" },
+      { scale: 1, duration: 0.3, ease: "power3.out" },
       press.at + press.duration
     );
 
@@ -1927,12 +1932,17 @@ function initCardSplit() {
     if (seam) {
       const host = seam.offsetParent || seam.parentElement;
       const top = initialBox.top - host.getBoundingClientRect().top + seamY;
+      const { flash } = CONFIG;
       tl.fromTo(
         seam,
-        { top, yPercent: -50, scaleX: 0, autoAlpha: 1 },
+        { top, yPercent: -50, scaleX: 0, scaleY: 1, autoAlpha: 1, "--split-flash": 0 },
         { scaleX: 1, duration: CONFIG.seam.duration, ease: CONFIG.seam.ease },
         CONFIG.seam.at
-      ).to(seam, { autoAlpha: 0, duration: CONFIG.seam.fade, ease: "power2.out" }, CONFIG.cutAt);
+      )
+        // Flash — peaks on the cut frame, so the tear reads as the seam bursting
+        .to(seam, { scaleY: flash.scaleY, "--split-flash": 1, duration: flash.peak, ease: "power2.out" }, CONFIG.cutAt - flash.peak)
+        .to(seam, { scaleY: 1, "--split-flash": 0, duration: flash.decay, ease: "power3.out" }, CONFIG.cutAt)
+        .to(seam, { autoAlpha: 0, duration: CONFIG.seam.fade, ease: "power2.out" }, CONFIG.seam.at + CONFIG.seam.duration);
     }
 
     // Cut — on one frame the initial becomes the top piece and the right card the bottom piece

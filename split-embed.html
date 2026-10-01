@@ -20,4 +20,18 @@
     pointer-events: none;
     visibility: hidden;
   }
+  /* The flash at the cut — JS tweens --split-flash 0 → 1 → 0 (pseudo-elements can't be targeted directly) */
+  [data-split-seam]::after {
+    content: "";
+    position: absolute;
+    left: 8%;
+    right: 8%;
+    top: 50%;
+    height: 3rem; /* stretched by the seam's scaleY at the flash peak */
+    translate: 0 -50%;
+    scale: calc(0.6 + var(--split-flash, 0) * 0.4) 1;
+    border-radius: 50%;
+    background: radial-gradient(closest-side, color-mix(in srgb, var(--_colors---base-new--active-green-500) 60%, transparent), transparent);
+    opacity: var(--split-flash, 0);
+  }
 </style>
