@@ -1389,6 +1389,7 @@ function initSwipers() {
         slidesPerView: 1,
         spaceBetween: 16,
         grabCursor: true,
+        autoHeight: true,
       },
     },
   };
