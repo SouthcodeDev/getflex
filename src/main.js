@@ -1769,7 +1769,7 @@ function initCardSplit() {
     // part pulls the pieces apart (back.out gives the snap); heal grows each back to a full card, starting later
     // and running slower so a gap tears open first. heal must never get ahead of part or the pieces overlap —
     // the elastic dips back ~3% halfway through, so keep heal slow enough to stay behind it
-    part: { duration: 0.75, ease: "back.out" },
+    part: { duration: 1, ease: "back.out" },
     heal: { delay: 0, duration: 0.7, ease: "power3.inOut" },
     reveal: { offset: 0.2, duration: 0.5, ease: "expo.out", stagger: 0.05, y: "0.75rem" }, // offset: seconds after the cut
   };
