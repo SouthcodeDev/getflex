@@ -1760,8 +1760,8 @@ function initCardSplit() {
     seam: { at: 0.05, duration: 0.32, ease: "power2.out", fade: 0.35 }, // fade: seconds it takes to fade out once drawn
     // The flash at the cut: the seam thickens and its bloom (the ::after in the embed CSS, driven by
     // --split-flash) blazes for `peak` seconds, then both die back over `decay`
-    flash: { peak: 0.05, decay: 0.4, scaleY: 2.5 },
-    cutAt: 0.2, // keep this after the lower rows have settled, or they visibly jump when the bottom piece takes over
+    flash: { peak: 0.1, decay: 0.05, scaleY: 5 },
+    cutAt: 0.1, // keep this after the lower rows have settled, or they visibly jump when the bottom piece takes over
     // Final stack: the top card rises by lift × (its height + gap) and the bottom card drops by the rest,
     // so lift 1 keeps the bottom card where the original sat and 0.5 centres the pair on it.
     // x (px) staggers them sideways so they don't sit in line. Mind the gap against rotation, bob and magnet pull
@@ -1769,7 +1769,7 @@ function initCardSplit() {
     // part pulls the pieces apart (back.out gives the snap); heal grows each back to a full card, starting later
     // and running slower so a gap tears open first. heal must never get ahead of part or the pieces overlap —
     // the elastic dips back ~3% halfway through, so keep heal slow enough to stay behind it
-    part: { duration: 0.5, ease: "back.out" },
+    part: { duration: 0.75, ease: "back.out" },
     heal: { delay: 0, duration: 0.7, ease: "power3.inOut" },
     reveal: { offset: 0.2, duration: 0.5, ease: "expo.out", stagger: 0.05, y: "0.75rem" }, // offset: seconds after the cut
   };
@@ -1898,6 +1898,34 @@ function initCardSplit() {
 
     // The right card starts over the initial (in the initial's magnet frame) and blends into its own
     // spot as it travels, so it tears off one card and lands as the other
+    // The seam rides the top piece's cut edge: the magnet layer's drift (when the seam sits outside it),
+    // plus the card's own move, squeeze and rotation about its centre
+    const seamHost = seam && (seam.offsetParent || seam.parentElement);
+    const carrySeam = initialMagnet && seamHost?.contains(initialMagnet);
+    const seam0 = carrySeam ? shift(initialMagnet) : { x: 0, y: 0 };
+    const followSeam = () => {
+      const m = carrySeam ? shift(initialMagnet) : seam0;
+      const d = (seamY - ih / 2) * gsap.getProperty(initial, "scale");
+      const r = (gsap.getProperty(initial, "rotation") * Math.PI) / 180;
+      gsap.set(seam, {
+        x: m.x - seam0.x + gsap.getProperty(initial, "x") - d * Math.sin(r),
+        y: m.y - seam0.y + gsap.getProperty(initial, "y") + d * Math.cos(r) - (seamY - ih / 2),
+        rotation: r * (180 / Math.PI),
+      });
+    };
+
+    // clip-path cuts the card's box-shadow off at the cut edge, so while it's clipped the shadow is
+    // redrawn as a drop-shadow on the parent, which shadows the clipped shape (spread is dropped)
+    const shadowHost = initial.parentElement;
+    const dropShadow = getComputedStyle(initial)
+      .boxShadow.split(/,(?![^(]*\))/)
+      .filter((s) => s !== "none" && !s.includes("inset"))
+      .map((s) => {
+        const [, color, x, y, blur = "0px"] = s.trim().match(/^(\S*\(.*?\)|\S+)\s+(\S+)\s+(\S+)\s*(\S+)?/) || [];
+        return color ? `drop-shadow(${x} ${y} ${blur} ${color})` : "";
+      })
+      .join(" ");
+
     const travel = { p: 0 };
     const placeRight = () => {
       const a = shift(initialMagnet);
@@ -1909,7 +1937,14 @@ function initCardSplit() {
       });
     };
 
-    const tl = gsap.timeline({ onComplete: done });
+    const tl = gsap.timeline({
+      onUpdate: seam ? followSeam : undefined,
+      onComplete: () => {
+        gsap.set(initial, { clearProps: "boxShadow" });
+        if (dropShadow) gsap.set(shadowHost, { clearProps: "filter" });
+        done();
+      },
+    });
     const { press, swap, part, heal } = CONFIG;
 
     // Press — the cut reads as the button's result, not something that just happens to the card
@@ -1938,8 +1973,7 @@ function initCardSplit() {
 
     // Seam
     if (seam) {
-      const host = seam.offsetParent || seam.parentElement;
-      const top = initialBox.top - host.getBoundingClientRect().top + seamY;
+      const top = initialBox.top - seamHost.getBoundingClientRect().top + seamY;
       const { flash } = CONFIG;
       tl.fromTo(
         seam,
@@ -1956,7 +1990,8 @@ function initCardSplit() {
     // Cut — on one frame the initial becomes the top piece and the right card the bottom piece
     const cut = CONFIG.cutAt;
     tl.set(reveal, { autoAlpha: 0, y: CONFIG.reveal.y }, 0)
-      .set(initial, { clipPath: clip(OUT, ih - seamY) }, cut)
+      .set(initial, { clipPath: clip(OUT, ih - seamY), ...(dropShadow && { boxShadow: "none" }) }, cut)
+      .set(shadowHost, dropShadow ? { filter: dropShadow } : {}, cut)
       .set(right, { clipPath: clip(rightSeamY, OUT), autoAlpha: 1 }, cut)
       .call(placeRight, null, cut)
       // Part
