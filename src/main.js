@@ -1837,12 +1837,17 @@ function initCardSplit() {
   // The cut runs through the gap above the first row that sits directly in the card (the amount),
   // since everything from there down matches between the two cards once the rows have rolled
   const getSeamY = () => {
-    const box = initial.getBoundingClientRect();
     const row = masks.find((m) => m.parentElement === initial);
     const above = row?.previousElementSibling;
-    if (!above) return box.height / 2;
-    return (above.getBoundingClientRect().bottom + row.getBoundingClientRect().top) / 2 - box.top;
+    if (!above) return initial.offsetHeight / 2;
+    const top = initial.getBoundingClientRect().top;
+    return ((above.getBoundingClientRect().bottom + row.getBoundingClientRect().top) / 2 - top) / zoom();
   };
+
+  // The float layer is scaled down on mobile (see initCardFloat). Rects are in screen px but the cards
+  // move in their own (unscaled) px, so rect measurements are divided by this
+  const floatEl = hero.querySelector("[data-card-float]");
+  const zoom = () => (floatEl ? gsap.getProperty(floatEl, "scale") : 1);
 
   let heights;
   const shift = (m) =>
@@ -1886,7 +1891,7 @@ function initCardSplit() {
     const seamY = getSeamY();
     const lowered = ih - right.offsetHeight; // bottom-align the right card so its lower rows sit on the initial's
     const rightSeamY = seamY - lowered;
-    const isBelow = (el, box, line) => el.getBoundingClientRect().top - box.top >= line;
+    const isBelow = (el, box, line) => (el.getBoundingClientRect().top - box.top) / zoom() >= line;
     const initialBox = initial.getBoundingClientRect();
     const rightBox = right.getBoundingClientRect();
     // Only the right card's rows above the cut are new; the ones below are the bottom piece itself
@@ -1973,7 +1978,7 @@ function initCardSplit() {
 
     // Seam
     if (seam) {
-      const top = initialBox.top - seamHost.getBoundingClientRect().top + seamY;
+      const top = (initialBox.top - seamHost.getBoundingClientRect().top) / zoom() + seamY;
       const { flash } = CONFIG;
       tl.fromTo(
         seam,
@@ -2042,6 +2047,9 @@ function initCardFloat() {
     // falloff > 1 makes the pull fade faster with distance (1 = linear, so it stays strong across the section);
     // stepDuration gives each card its own lag; minGap is the closest the cards may be pulled together (px)
     magnet: { strength: 0.05, maxPull: 12, falloff: 1, duration: 1.2, stepDuration: 0.3, ease: "power3.out", minGap: 8 },
+    // Scales the whole stack on small screens. It's set through GSAP because it owns this layer's
+    // transform for the tilt; a Webflow transform here gets overwritten
+    mobile: { query: "(max-width: 767px)", scale: 0.75 },
   };
 
   const hero = document.querySelector("[data-home-hero]");
@@ -2051,6 +2059,9 @@ function initCardFloat() {
   if (!floatEl && !magnets.length) return;
 
   const mm = gsap.matchMedia();
+
+  /* ---------- Mobile scale ---------- */
+  if (floatEl) mm.add(CONFIG.mobile.query, () => gsap.set(floatEl, { scale: CONFIG.mobile.scale }));
 
   /* ---------- Float ---------- */
   mm.add("(prefers-reduced-motion: no-preference)", () => {
