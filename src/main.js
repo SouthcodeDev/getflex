@@ -1417,14 +1417,31 @@ function initSwipers() {
 
     let swiper = null;
 
-    const enable = () => {
-      if (swiper) return;
-      swiper = new Swiper(container, {
-        ...setup.options,
-        modules: [Pagination],
-        pagination: pagination ? { el: pagination, clickable: true } : false,
-      });
-    };
+const enable = () => {
+  if (swiper) return;
+
+  // Add a class only when it isn't already there
+  const ensureClass = (el, cls) => {
+    if (el && !el.classList.contains(cls)) el.classList.add(cls);
+  };
+
+  // Prefer an explicit hook, fall back to the first child
+  const wrapper =
+    container.querySelector(':scope > [data-swiper-wrapper]') ||
+    container.querySelector(':scope > .swiper-wrapper') ||
+    container.firstElementChild;
+  if (!wrapper) return;
+
+  ensureClass(container, 'swiper');
+  ensureClass(wrapper, 'swiper-wrapper');
+  [...wrapper.children].forEach((slide) => ensureClass(slide, 'swiper-slide'));
+
+  swiper = new Swiper(container, {
+    ...setup.options,
+    modules: [Pagination],
+    pagination: pagination ? { el: pagination, clickable: true } : false,
+  });
+};
 
     const disable = () => {
       if (!swiper) return;
