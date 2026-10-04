@@ -1780,6 +1780,10 @@ function initCardSplit() {
     // so lift 1 keeps the bottom card where the original sat and 0.5 centres the pair on it.
     // x (px) staggers them sideways so they don't sit in line. Mind the gap against rotation, bob and magnet pull
     stack: { gap: 0, lift: 1, top: { x: -16, rotation: -3 }, bottom: { x: 24, rotation: 2 } },
+    // If the top card would rise to within navClear (rem) of the top of the page, the cards sit side by side
+    // instead: the initial card only nudges left by `shift` (px) and the new card pops in to its right,
+    // `gap` (px) away. The stack x offsets above become y offsets
+    row: { navClear: 5, shift: 24, gap: 16 },
     // Both cards start a hair apart (nudge, px) and a touch small, so the cut reads as two cards at once
     push: { duration: 1, ease: "expo.out", scale: 0.97, nudge: 6 },
   };
@@ -1838,9 +1842,25 @@ function initCardSplit() {
   const layout = () => {
     const { gap, lift, top, bottom } = CONFIG.stack;
     const travel = initial.offsetHeight + gap;
+
+    // Where the initial card sits on the page at rest (its own y backed out, in case it has already moved)
+    const restTop = initial.getBoundingClientRect().top + scrollY - gsap.getProperty(initial, "y") * zoom();
+    const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
+    if (restTop - travel * lift * zoom() >= CONFIG.row.navClear * rem) {
+      return {
+        top: { x: top.x, y: -travel * lift, rotation: top.rotation },
+        bottom: { left: bottom.x, top: travel * (1 - lift), rotation: bottom.rotation },
+      };
+    }
+
+    // Side by side, centred on each other vertically (the right card is bottom-aligned to the initial)
+    const row = CONFIG.row;
+    const across = initial.offsetWidth + row.gap;
+    const lowered = initial.offsetHeight - right.offsetHeight;
     return {
-      top: { x: top.x, y: -travel * lift, rotation: top.rotation },
-      bottom: { left: bottom.x, top: travel * (1 - lift), rotation: bottom.rotation },
+      row: true,
+      top: { x: -row.shift, y: top.x, rotation: top.rotation },
+      bottom: { left: across - row.shift, top: lowered / 2 + bottom.x, rotation: bottom.rotation },
     };
   };
 
@@ -1922,13 +1942,17 @@ function initCardSplit() {
     // The right card starts under the initial (in the initial's magnet frame) and blends into its own
     // spot as it travels, so it's pushed out of the one card and lands as the other
     const travel = { p: 0 };
+    // Side by side, it pops in at its own spot instead, starting a nudge in towards the initial
     const placeRight = () => {
       const a = shift(initialMagnet);
       const b = shift(rightMagnet);
       const p = travel.p;
+      const from = end.row
+        ? { left: end.bottom.left - push.nudge, top: end.bottom.top }
+        : { left: a.x - b.x, top: lowered + push.nudge + a.y - b.y };
       gsap.set(right, {
-        left: (a.x - b.x) * (1 - p) + end.bottom.left * p,
-        top: (lowered + push.nudge + a.y - b.y) * (1 - p) + end.bottom.top * p,
+        left: from.left * (1 - p) + end.bottom.left * p,
+        top: from.top * (1 - p) + end.bottom.top * p,
       });
     };
 
@@ -1986,8 +2010,8 @@ function initCardSplit() {
     resizeTimer = setTimeout(() => {
       if (!settled) return;
       const end = layout();
-      gsap.set(initial, { y: end.top.y });
-      gsap.set(right, { top: end.bottom.top });
+      gsap.set(initial, end.top);
+      gsap.set(right, end.bottom);
     }, 150);
   });
 }
