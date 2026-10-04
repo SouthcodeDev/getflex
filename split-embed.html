@@ -4,6 +4,19 @@
   .payment-card_float { position: relative; }
   /* The right card is in normal flow; it needs positioning for its z-index and the left/top offsets JS gives it */
   [data-split-card="right"] { position: relative; }
+  /* The green flash at the cut — JS tweens --split-glow 0 → 1 → 0 on the initial card */
+  [data-split-card="initial"] { position: relative; }
+  [data-split-card="initial"]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    border-radius: inherit;
+    background: color-mix(in srgb, var(--_colors---base-new--active-green-500) 45%, transparent);
+    box-shadow: 0 0 2.5rem color-mix(in srgb, var(--_colors---base-new--active-green-500) 70%, transparent);
+    opacity: var(--split-glow, 0);
+    pointer-events: none;
+  }
   /* The initial card's layer sits over the right card so the seam glows over both pieces at the cut */
   .home-hero_payment-card-above-wrap { z-index: 5; }
   /* The cut: JS sets its top to the gap above the amount and draws it out from the centre */

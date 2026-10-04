@@ -1756,39 +1756,32 @@ function initCalculators() {
 }
 
 /* ==========================================================================
-   Card split — the Split button is pressed, a seam is drawn through the card,
-   and it tears into two pieces that pull apart and each grow back into a card
+   Card split — the Split button is pressed, a seam blinks through the card,
+   the card flashes green and two cards burst out of it, pushed apart
    --------------------------------------------------------------------------
-   The tear is two real cards, not clones: once the amount and button rows have
-   rolled to their halves, the initial card's lower half matches the right card's,
-   so at the cut the initial card is clipped to the top piece and the right card,
-   laid exactly over it, to the bottom piece. Neither clip then opens back up.
+   A hard cut, not a tear: under the flash the initial card's rows swap to their
+   new content on one frame and the right card appears directly beneath it, then
+   both are pushed out to the resting stack.
    ========================================================================== */
 function initCardSplit() {
   const CONFIG = {
     autoSplit: 2.5, // seconds after load before the card splits on its own; clicking [data-split-trigger] splits sooner
-    color: "--_colors---base-new--active-green-500", // pressed button (the seam's colour is set in the embed CSS)
+    color: "--_colors---base-new--active-green-500", // pressed button (the seam and glow colours are set in the embed CSS)
     intro: { delay: 0.375, duration: 1.2, ease: "expo.out", y: "3rem", scale: 0.96 },
     // Times below are seconds from the trigger. The card squeezes a touch with the button press
     press: { at: 0, duration: 0.09, scale: 0.9, squeeze: 0.975, text: "--_colors---base-new--dark-900" },
-    // Rows below the seam (amount, button) roll to their halves before the cut; rows above roll on the top piece after it
-    swap: { at: 0, duration: 0.25, ease: "expo.out", stagger: 0.03 },
-    // The seam is still drawing out to the edges when the cut lands, so the pieces part mid-stroke
-    seam: { at: 0.05, duration: 0.32, ease: "power2.out", fade: 0.35 }, // fade: seconds it takes to fade out once drawn
-    // The flash at the cut: the seam thickens and its bloom (the ::after in the embed CSS, driven by
-    // --split-flash) blazes for `peak` seconds, then both die back over `decay`
-    flash: { peak: 0.1, decay: 0.05, scaleY: 5 },
-    cutAt: 0.1, // keep this after the lower rows have settled, or they visibly jump when the bottom piece takes over
+    // The blink: the seam snaps out to the edges, then fades as it rides the top card away
+    seam: { at: 0.02, duration: 0.12, ease: "expo.out", fade: 0.2 },
+    // The flash: the card's green glow (--split-glow) and the seam's bloom (--split-flash) peak on the
+    // cut frame, hiding the content swap, then die back over `decay`. scaleY thickens the seam at the peak
+    flash: { peak: 0.06, decay: 0.3, scaleY: 5 },
+    cutAt: 0.14,
     // Final stack: the top card rises by lift × (its height + gap) and the bottom card drops by the rest,
     // so lift 1 keeps the bottom card where the original sat and 0.5 centres the pair on it.
     // x (px) staggers them sideways so they don't sit in line. Mind the gap against rotation, bob and magnet pull
     stack: { gap: 0, lift: 1, top: { x: -16, rotation: -3 }, bottom: { x: 24, rotation: 2 } },
-    // part pulls the pieces apart (back.out gives the snap); heal grows each back to a full card, starting later
-    // and running slower so a gap tears open first. heal must never get ahead of part or the pieces overlap —
-    // the elastic dips back ~3% halfway through, so keep heal slow enough to stay behind it
-    part: { duration: 1, ease: "back.out" },
-    heal: { delay: 0, duration: 0.7, ease: "power3.inOut" },
-    reveal: { offset: 0.2, duration: 0.5, ease: "expo.out", stagger: 0.05, y: "0.75rem" }, // offset: seconds after the cut
+    // Both cards start a hair apart (nudge, px) and a touch small, so the cut reads as two cards at once
+    push: { duration: 1, ease: "expo.out", scale: 0.97, nudge: 6 },
   };
 
   const hero = document.querySelector("[data-home-hero]");
@@ -1891,7 +1884,6 @@ function initCardSplit() {
     const done = () => {
       settled = true;
       right.inert = false;
-      gsap.set([initial, right], { clearProps: "clipPath" });
       hero.dispatchEvent(new CustomEvent("cardsplit:complete"));
     };
 
@@ -1906,21 +1898,12 @@ function initCardSplit() {
     heights = new Map([initialMagnet, rightMagnet].filter(Boolean).map((m) => [m, m.offsetHeight]));
     const ih = initial.offsetHeight;
     const seamY = getSeamY();
-    const lowered = ih - right.offsetHeight; // bottom-align the right card so its lower rows sit on the initial's
-    const rightSeamY = seamY - lowered;
-    const isBelow = (el, box, line) => (el.getBoundingClientRect().top - box.top) / zoom() >= line;
+    const lowered = ih - right.offsetHeight; // bottom-align the right card under the initial
     const initialBox = initial.getBoundingClientRect();
-    const rightBox = right.getBoundingClientRect();
-    // Only the right card's rows above the cut are new; the ones below are the bottom piece itself
-    const reveal = [...right.children].filter((el) => !isBelow(el, rightBox, rightSeamY));
+    const { press, seam: seamCfg, flash, push } = CONFIG;
+    const cut = CONFIG.cutAt;
 
-    // Clip-path insets reach well past the card on the uncut sides so its shadow isn't clipped
-    const OUT = -320;
-    const clip = (t, b) => `inset(${t}px ${OUT}px ${b}px ${OUT}px)`;
-
-    // The right card starts over the initial (in the initial's magnet frame) and blends into its own
-    // spot as it travels, so it tears off one card and lands as the other
-    // The seam rides the top piece's cut edge: the magnet layer's drift (when the seam sits outside it),
+    // The seam rides the top card: the magnet layer's drift (when the seam sits outside it),
     // plus the card's own move, squeeze and rotation about its centre
     const seamHost = seam && (seam.offsetParent || seam.parentElement);
     const carrySeam = initialMagnet && seamHost?.contains(initialMagnet);
@@ -1936,18 +1919,8 @@ function initCardSplit() {
       });
     };
 
-    // clip-path cuts the card's box-shadow off at the cut edge, so while it's clipped the shadow is
-    // redrawn as a drop-shadow on the parent, which shadows the clipped shape (spread is dropped)
-    const shadowHost = initial.parentElement;
-    const dropShadow = getComputedStyle(initial)
-      .boxShadow.split(/,(?![^(]*\))/)
-      .filter((s) => s !== "none" && !s.includes("inset"))
-      .map((s) => {
-        const [, color, x, y, blur = "0px"] = s.trim().match(/^(\S*\(.*?\)|\S+)\s+(\S+)\s+(\S+)\s*(\S+)?/) || [];
-        return color ? `drop-shadow(${x} ${y} ${blur} ${color})` : "";
-      })
-      .join(" ");
-
+    // The right card starts under the initial (in the initial's magnet frame) and blends into its own
+    // spot as it travels, so it's pushed out of the one card and lands as the other
     const travel = { p: 0 };
     const placeRight = () => {
       const a = shift(initialMagnet);
@@ -1955,19 +1928,11 @@ function initCardSplit() {
       const p = travel.p;
       gsap.set(right, {
         left: (a.x - b.x) * (1 - p) + end.bottom.left * p,
-        top: (lowered + a.y - b.y) * (1 - p) + end.bottom.top * p,
+        top: (lowered + push.nudge + a.y - b.y) * (1 - p) + end.bottom.top * p,
       });
     };
 
-    const tl = gsap.timeline({
-      onUpdate: seam ? followSeam : undefined,
-      onComplete: () => {
-        gsap.set(initial, { clearProps: "boxShadow" });
-        if (dropShadow) gsap.set(shadowHost, { clearProps: "filter" });
-        done();
-      },
-    });
-    const { press, swap, part, heal } = CONFIG;
+    const tl = gsap.timeline({ onUpdate: seam ? followSeam : undefined, onComplete: done });
 
     // Press — the cut reads as the button's result, not something that just happens to the card
     if (button) {
@@ -1977,58 +1942,35 @@ function initCardSplit() {
         press.at
       ).to(button, { scale: 1, duration: 0.3, ease: "back.out(3)" }, press.at + press.duration);
     }
-    tl.to(initial, { scale: press.squeeze, duration: press.duration, ease: "power2.out" }, press.at).to(
-      initial,
-      { scale: 1, duration: 0.3, ease: "power3.out" },
-      press.at + press.duration
-    );
+    tl.to(initial, { scale: press.squeeze, duration: press.duration, ease: "power2.out" }, press.at);
 
-    // Rows roll to their halves: the lower ones before the cut, the upper ones on the top piece after it
-    const lower = masks.filter((m) => isBelow(m, initialBox, seamY));
-    const upper = masks.filter((m) => !lower.includes(m));
-    lower.forEach((m, i) =>
-      tl.to(m.children, { yPercent: -100, duration: swap.duration, ease: swap.ease }, swap.at + i * swap.stagger)
-    );
-    upper.forEach((m, i) =>
-      tl.to(m.children, { yPercent: -100, duration: swap.duration, ease: swap.ease }, CONFIG.cutAt + 0.05 + i * swap.stagger)
-    );
-
-    // Seam
+    // Blink
     if (seam) {
       const top = (initialBox.top - seamHost.getBoundingClientRect().top) / zoom() + seamY;
-      const { flash } = CONFIG;
       tl.fromTo(
         seam,
         { top, yPercent: -50, scaleX: 0, scaleY: 1, autoAlpha: 1, "--split-flash": 0 },
-        { scaleX: 1, duration: CONFIG.seam.duration, ease: CONFIG.seam.ease },
-        CONFIG.seam.at
+        { scaleX: 1, duration: seamCfg.duration, ease: seamCfg.ease },
+        seamCfg.at
       )
-        // Flash — peaks on the cut frame, so the tear reads as the seam bursting
-        .to(seam, { scaleY: flash.scaleY, "--split-flash": 1, duration: flash.peak, ease: "power2.out" }, CONFIG.cutAt - flash.peak)
-        .to(seam, { scaleY: 1, "--split-flash": 0, duration: flash.decay, ease: "power3.out" }, CONFIG.cutAt)
-        .to(seam, { autoAlpha: 0, duration: CONFIG.seam.fade, ease: "power2.out" }, CONFIG.seam.at + CONFIG.seam.duration);
+        .to(seam, { scaleY: flash.scaleY, "--split-flash": 1, duration: flash.peak, ease: "power2.out" }, cut - flash.peak)
+        .to(seam, { scaleY: 1, "--split-flash": 0, duration: flash.decay, ease: "power3.out" }, cut)
+        .to(seam, { autoAlpha: 0, duration: seamCfg.fade, ease: "power2.out" }, cut);
     }
 
-    // Cut — on one frame the initial becomes the top piece and the right card the bottom piece
-    const cut = CONFIG.cutAt;
-    tl.set(reveal, { autoAlpha: 0, y: CONFIG.reveal.y }, 0)
-      .set(initial, { clipPath: clip(OUT, ih - seamY), ...(dropShadow && { boxShadow: "none" }) }, cut)
-      .set(shadowHost, dropShadow ? { filter: dropShadow } : {}, cut)
-      .set(right, { clipPath: clip(rightSeamY, OUT), autoAlpha: 1 }, cut)
+    // Flash
+    tl.fromTo(initial, { "--split-glow": 0 }, { "--split-glow": 1, duration: flash.peak, ease: "power2.out" }, cut - flash.peak)
+      .to(initial, { "--split-glow": 0, duration: flash.decay, ease: "power3.out" }, cut);
+
+    // Cut — under the flash the content swaps instantly and the right card appears beneath
+    tl.set(masks.flatMap((m) => [...m.children]), { yPercent: -100 }, cut)
+      .set(initial, { y: -push.nudge, scale: push.scale }, cut)
+      .set(right, { autoAlpha: 1, scale: push.scale }, cut)
       .call(placeRight, null, cut)
-      // Part
-      .to(initial, { ...end.top, duration: part.duration, ease: part.ease }, cut)
-      .to(right, { rotation: end.bottom.rotation, duration: part.duration, ease: part.ease }, cut)
-      .to(travel, { p: 1, duration: part.duration, ease: part.ease, onUpdate: placeRight }, cut)
-      // Heal
-      .to(initial, { clipPath: clip(OUT, 0), duration: heal.duration, ease: heal.ease }, cut + heal.delay)
-      .to(right, { clipPath: clip(0, OUT), duration: heal.duration, ease: heal.ease }, cut + heal.delay)
-      // The right card's own header comes in as its top grows back
-      .to(
-        reveal,
-        { autoAlpha: 1, y: 0, duration: CONFIG.reveal.duration, ease: CONFIG.reveal.ease, stagger: CONFIG.reveal.stagger },
-        cut + CONFIG.reveal.offset
-      );
+      // Push
+      .to(initial, { ...end.top, scale: 1, duration: push.duration, ease: push.ease }, cut)
+      .to(right, { rotation: end.bottom.rotation, scale: 1, duration: push.duration, ease: push.ease }, cut)
+      .to(travel, { p: 1, duration: push.duration, ease: push.ease, onUpdate: placeRight }, cut);
   };
 
   const autoSplit = gsap.delayedCall(CONFIG.autoSplit, split);
