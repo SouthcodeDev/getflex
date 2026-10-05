@@ -1,11 +1,3 @@
-import gsap from 'gsap';
-import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import { SplitText } from 'gsap/all';
-import { InertiaPlugin } from 'gsap/InertiaPlugin';
-import Lenis from 'lenis';
-import Swiper from 'swiper';
-import { Pagination } from 'swiper/modules';
-
 gsap.registerPlugin(ScrollTrigger, SplitText, InertiaPlugin);
 
 
@@ -1438,7 +1430,6 @@ const enable = () => {
 
   swiper = new Swiper(container, {
     ...setup.options,
-    modules: [Pagination],
     pagination: pagination ? { el: pagination, clickable: true } : false,
   });
 };
