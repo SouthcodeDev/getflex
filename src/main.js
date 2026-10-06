@@ -1452,7 +1452,7 @@ const enable = () => {
 /**
  * Bill split calculator
  *
- * Root:  [data-calc="root"] with data-calc-page="home | bills | rent | mortgage | car"
+ * Root:  [data-calc="root"] with data-calc-page="home | bills | rent | mortgage | car | childcare | insurance | homeservices"
  *        optional data-calc-default="<bill key>" to start on a different bill of that page's list
  *
  * Emits "calculator:update" on the root (detail: { bill, amount, payment1, payment2, fees })
@@ -1462,22 +1462,21 @@ function initCalculators() {
   const CONFIG = {
     fees: {
       processing: 0.005, // of the total bill, added to payment 1
-      split: 0.03,       // of the split amount (payment 2), added to payment 2
+      split: 0.03,       // of payment 2's bill share (not always 50%), added to payment 2
       membership: 5.99,  // flat, rent only, added to payment 1
     },
-    // Up to the threshold the bill splits 50/50; above it payment 2 is fixed and payment 1 takes the rest
-    split: { threshold: 4000, fixedSecond: 2000 },
-    // amount = default when the bill is selected; min/max/step drive the slider
+    // amount = default when the bill is selected; min/max/step drive the slider.
+    // Up to 2 × fixedSecond the bill splits 50/50; above it payment 2 is fixedSecond and payment 1 takes the rest
     bills: {
-      rent:      { label: "Rent",        amount: 1400, min: 600, max: 5000, step: 10, membership: true },
-      mortgage:  { label: "Mortgage",    amount: 2400, min: 10,  max: 5000,  step: 10 },
-      car:       { label: "Car payment", amount: 480,  min: 10,  max: 5000,  step: 10 },
-      utilities: { label: "Utilities",   amount: 300,  min: 10,  max: 5000,  step: 10 },
-      childcare: { label: "Childcare",   amount: 400,  min: 10,  max: 5000,  step: 10 },
-      insurance: { label: "Insurance",   amount: 350,  min: 10,  max: 5000,  step: 10 },
-      internet:  { label: "Internet",    amount: 250,  min: 10,  max: 5000,  step: 5 },
-      tv:        { label: "TV",          amount: 250,  min: 10,  max: 5000,  step: 5 },
-      phone:     { label: "Phone",       amount: 250,  min: 10,  max: 5000,  step: 5 },
+      rent:      { label: "Rent",        amount: 1400, min: 600, max: 5000, step: 10, fixedSecond: 2000, membership: true },
+      mortgage:  { label: "Mortgage",    amount: 2400, min: 10,  max: 5000, step: 10, fixedSecond: 1500 },
+      car:       { label: "Car payment", amount: 480,  min: 10,  max: 5000, step: 10, fixedSecond: 600 },
+      utilities: { label: "Utilities",   amount: 300,  min: 10,  max: 5000, step: 10, fixedSecond: 800 },
+      childcare: { label: "Childcare",   amount: 400,  min: 10,  max: 5000, step: 10, fixedSecond: 1200 },
+      insurance: { label: "Insurance",   amount: 350,  min: 10,  max: 5000, step: 10, fixedSecond: 500 },
+      internet:  { label: "Internet",    amount: 250,  min: 10,  max: 5000, step: 5,  fixedSecond: 400 },
+      tv:        { label: "TV",          amount: 250,  min: 10,  max: 5000, step: 5,  fixedSecond: 400 },
+      phone:     { label: "Phone",       amount: 250,  min: 10,  max: 5000, step: 5,  fixedSecond: 400 },
     },
     // Bills available per page; the first one is the default. One bill = no dropdown.
     pages: {
@@ -1486,6 +1485,9 @@ function initCalculators() {
       rent:     ["rent"],
       mortgage: ["mortgage"],
       car:      ["car"],
+      childcare: ["childcare"],
+      insurance: ["insurance"],
+      homeservices: ["internet"], // no toggle; internet, TV and phone share the same rules
     },
     defaultPage: "home",
     pageKeySteps: 10, // PageUp / PageDown jump size, in steps
@@ -1498,9 +1500,8 @@ function initCalculators() {
   // Work in integer cents so the two payments always add up exactly
   function calculate(total, bill) {
     const totalC = Math.round(total * 100);
-    const secondHalf = totalC > CONFIG.split.threshold * 100
-      ? CONFIG.split.fixedSecond * 100
-      : totalC - Math.round(totalC / 2);
+    const fixedC = bill.fixedSecond * 100;
+    const secondHalf = totalC > fixedC * 2 ? fixedC : totalC - Math.round(totalC / 2);
     const firstHalf = totalC - secondHalf;
     const processing = Math.round(totalC * CONFIG.fees.processing);
     const split = Math.round(secondHalf * CONFIG.fees.split);
