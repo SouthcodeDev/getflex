@@ -1283,7 +1283,8 @@ function initAccordionCSS() {
 
 function initCTAAnim() {
   const footer = document.querySelector('[data-cta]');
-  const maskEl = footer.querySelector('[data-cta-mask]');
+  const maskEl = footer?.querySelector('[data-cta-mask]');
+  if (!maskEl) return;
 
   gsap.from(maskEl, {
     maskSize: "auto 0%",
@@ -2588,6 +2589,159 @@ function initModalBasic() {
 }
 
 /* ==========================================================================
+   404 — images drop in from above the viewport, pile up on the floor and can
+   be dragged / thrown around. Matter.js runs the physics (global, loaded from
+   CDN), GSAP's ticker drives it, the DOM images just mirror the bodies.
+   ========================================================================== */
+function init404() {
+  const CONFIG = {
+    count: 5,                 // total images, including the original
+    drop: { min: 0.15, max: 1.4 }, // start height above the viewport, × viewport height
+    body: { restitution: 0.45, friction: 0.3, frictionAir: 0.012 },
+    spin: 0.08,               // max starting angular velocity, so they tumble
+    grab: { stiffness: 0.2, damping: 0.1 },
+    wall: 400,                // wall thickness, thick so thrown images don't tunnel through
+  };
+
+  const bg = document.querySelector("[data-404-bg]");
+  const source = bg?.querySelector("[data-404-image]");
+  if (!source || typeof Matter === "undefined") return;
+
+  const { Engine, Bodies, Body, Composite, Constraint, Sleeping } = Matter;
+  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // Wait for the image so it has a real size to measure
+  (source.decode?.() ?? Promise.resolve()).catch(() => {}).then(start);
+
+  function start() {
+    const els = [source];
+    for (let i = 1; i < CONFIG.count; i++) els.push(bg.appendChild(source.cloneNode(true)));
+
+    let W = bg.clientWidth;
+    let H = bg.clientHeight;
+    let w = source.offsetWidth;
+    let h = source.offsetHeight;
+
+    const engine = Engine.create({ enableSleeping: true });
+
+    // Floor and side walls. Sides reach far above the viewport so images can't escape while falling
+    let walls = [];
+    const placeWalls = () => {
+      const T = CONFIG.wall;
+      const tall = H * (CONFIG.drop.max + 2);
+      Composite.remove(engine.world, walls);
+      walls = [
+        Bodies.rectangle(W / 2, H + T / 2, W + T * 2, T, { isStatic: true }),
+        Bodies.rectangle(-T / 2, H - tall / 2, T, tall, { isStatic: true }),
+        Bodies.rectangle(W + T / 2, H - tall / 2, T, tall, { isStatic: true }),
+      ];
+      Composite.add(engine.world, walls);
+    };
+    placeWalls();
+
+    // Random x; random heights spread over distinct bands so they land one after another.
+    // Reduced motion: already resting on the floor, spaced out so they don't overlap
+    const order = gsap.utils.shuffle([...els.keys()]);
+    const band = (CONFIG.drop.max - CONFIG.drop.min) / els.length;
+    const bodies = els.map((el, i) => {
+      const x = reduceMotion ? (W * (i + 0.5)) / els.length : gsap.utils.random(w / 2, W - w / 2);
+      const y = reduceMotion
+        ? H - h / 2
+        : -h / 2 - H * (CONFIG.drop.min + band * (order[i] + Math.random()));
+      const body = Bodies.rectangle(x, y, w, h, { ...CONFIG.body, angle: reduceMotion ? 0 : gsap.utils.random(-0.3, 0.3) });
+      if (!reduceMotion) Body.setAngularVelocity(body, gsap.utils.random(-CONFIG.spin, CONFIG.spin));
+
+      Object.assign(el.style, { position: "absolute", left: "0", top: "0", touchAction: "none", cursor: "grab" });
+      el.draggable = false; // no native image ghost-drag
+      return body;
+    });
+
+    Composite.add(engine.world, bodies);
+
+    /* ---------- Drag: a spring from the pointer to the grabbed point ---------- */
+
+    let drag = null;
+    const toLocal = (e) => {
+      const r = bg.getBoundingClientRect();
+      return {
+        x: gsap.utils.clamp(0, W, e.clientX - r.left), // keeps the image within the viewport
+        y: gsap.utils.clamp(0, H, e.clientY - r.top),
+      };
+    };
+
+    els.forEach((el, i) => {
+      el.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        const body = bodies[i];
+        const p = toLocal(e);
+        Sleeping.set(body, false);
+        drag = Constraint.create({
+          pointA: p,
+          bodyB: body,
+          pointB: { x: p.x - body.position.x, y: p.y - body.position.y },
+          length: 0,
+          ...CONFIG.grab,
+        });
+        Composite.add(engine.world, drag);
+        el.setPointerCapture(e.pointerId);
+        el.style.cursor = "grabbing";
+      });
+      el.addEventListener("pointermove", (e) => {
+        if (drag?.bodyB === bodies[i]) drag.pointA = toLocal(e);
+      });
+      const release = () => {
+        if (drag?.bodyB !== bodies[i]) return;
+        Composite.remove(engine.world, drag); // the body keeps its velocity, so it's thrown
+        drag = null;
+        el.style.cursor = "grab";
+      };
+      el.addEventListener("pointerup", release);
+      el.addEventListener("pointercancel", release);
+    });
+
+    /* ---------- Loop ---------- */
+
+    const draw = () =>
+      bodies.forEach((b, i) => {
+        els[i].style.transform = `translate(${b.position.x - w / 2}px, ${b.position.y - h / 2}px) rotate(${b.angle}rad)`;
+      });
+    draw();
+
+    gsap.ticker.add((time, deltaMs) => {
+      // Zero idle cost: once everything has settled there's nothing to step or draw
+      if (!drag && bodies.every((b) => b.isSleeping)) return;
+      Engine.update(engine, Math.min(deltaMs, 1000 / 30)); // cap so a background tab doesn't explode the sim
+      draw();
+    });
+
+    // Walls follow the viewport; bodies rescale with the image (it's sized in vw)
+    let resizeTimer;
+    window.addEventListener("resize", () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(onResize, 150);
+    });
+    function onResize() {
+      const sx = W ? bg.clientWidth / W : 1;
+      W = bg.clientWidth;
+      H = bg.clientHeight;
+      const s = source.offsetWidth / w;
+      w = source.offsetWidth;
+      h = source.offsetHeight;
+      placeWalls();
+      bodies.forEach((b) => {
+        Sleeping.set(b, false);
+        if (s !== 1) Body.scale(b, s, s);
+        Body.setPosition(b, {
+          x: gsap.utils.clamp(w / 2, W - w / 2, b.position.x * sx),
+          y: Math.min(b.position.y, H - h / 2),
+        });
+      });
+    }
+  }
+}
+
+/* ==========================================================================
    Init
    --------------------------------------------------------------------------
    Lenis and parallax start immediately; anything that measures text waits on
@@ -2610,6 +2764,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initCardFloat();
     initNumberOdometer();
       initModalBasic();
+  init404();
 
 
 });
