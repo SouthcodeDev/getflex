@@ -1394,7 +1394,7 @@ function initSwipers() {
       media: '(max-width: 991px)',
       options: {
         slidesPerView: 1.125,
-        spaceBetween: 16,
+        spaceBetween: 0,
         grabCursor: true,
       },
     },
