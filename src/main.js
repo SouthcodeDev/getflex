@@ -1650,6 +1650,7 @@ function initCalculators() {
       // Single-bill pages: plain label, no toggle behaviour
       if (ui.select) ui.select.dataset.calcStatic = "true";
       if (ui.list) ui.list.remove();
+      if (ui.toggle) ui.toggle.classList.add("is-solo");
     } else {
       ui.list.id = `${id}-list`;
       ui.list.setAttribute("role", "listbox");
