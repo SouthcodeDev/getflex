@@ -1374,8 +1374,11 @@ function initMomentumBasedHover() {
    --------------------------------------------------------------------------
    data-swiper="name"          the .swiper container (standard Swiper markup:
                                .swiper > .swiper-wrapper > .swiper-slide)
-   data-swiper-pagination      empty div for the dots, inside the container or
-                               a sibling of it
+   data-swiper-outer="name"    optional ancestor wrapper, same name as the
+                               container, for pagination that sits further out
+   data-swiper-pagination      empty div for the dots, inside the container, a
+                               sibling of it, or anywhere inside its
+                               data-swiper-outer
    ========================================================================== */
 
 function initSwipers() {
@@ -1404,9 +1407,11 @@ function initSwipers() {
     const setup = SWIPERS[container.dataset.swiper];
     if (!setup) return;
 
+    const outer = container.closest(`[data-swiper-outer="${container.dataset.swiper}"]`);
     const pagination =
       container.querySelector('[data-swiper-pagination]') ||
-      container.parentElement.querySelector(':scope > [data-swiper-pagination]');
+      container.parentElement.querySelector(':scope > [data-swiper-pagination]') ||
+      outer?.querySelector('[data-swiper-pagination]');
 
     let swiper = null;
 
