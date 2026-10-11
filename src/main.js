@@ -764,16 +764,16 @@ function initGlobalParallax() {
   function animateBurger(toX) {
     const tl = gsap.timeline({ defaults: { ease: "back.out" } });
     if (toX) {
-      tl.to(lineTop, { y: "0.3em", duration: 0.25 }, 0);
-      tl.to(lineBot, { y: "-0.275em", duration: 0.25 }, 0);
+      tl.to(lineTop, { y: "0.2rem", duration: 0.25 }, 0);
+      tl.to(lineBot, { y: "-0.2rem", duration: 0.25 }, 0);
       tl.to(lineMid, { autoAlpha: 0, duration: 0.1 }, 0.1);
-      tl.to(lineTop, { rotation: 45, duration: 0.25 }, 0.15);
-      tl.to(lineBot, { rotation: -45, duration: 0.25 }, 0.15);
+      tl.to(lineTop, { rotation: 45, duration: 0.25 }, 0.1);
+      tl.to(lineBot, { rotation: -45, duration: 0.25 }, 0.1);
     } else {
       tl.to(lineTop, { rotation: 0, duration: 0.25 }, 0);
       tl.to(lineBot, { rotation: 0, duration: 0.25 }, 0);
-      tl.to(lineTop, { y: 0, duration: 0.15 }, 0.25);
-      tl.to(lineBot, { y: 0, duration: 0.15 }, 0.25);
+      tl.to(lineTop, { y: 0, duration: 0.15 }, 0.15);
+      tl.to(lineBot, { y: 0, duration: 0.15 }, 0.15);
       tl.to(lineMid, { autoAlpha: 1, duration: 0.1 }, 0.15);
     }
     return tl;
