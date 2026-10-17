@@ -1401,6 +1401,17 @@ function initSwipers() {
         grabCursor: true,
       },
     },
+    careers: {
+      media: '(max-width: 767px)',
+      options: {
+        slidesPerView: "auto",
+        centeredSlides: true,
+        grabCursor: true,
+        freeMode: { enabled: true, sticky: true },
+        mousewheel: { forceToAxis: true },
+        keyboard: { enabled: true, onlyInViewport: true },
+      },
+    },
   };
 
   document.querySelectorAll('[data-swiper]').forEach((container) => {
