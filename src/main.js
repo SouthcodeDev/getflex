@@ -1405,6 +1405,7 @@ function initSwipers() {
       media: '(max-width: 767px)',
       options: {
         slidesPerView: "auto",
+        initialSlide: 2,
         centeredSlides: true,
         grabCursor: true,
         freeMode: { enabled: true, sticky: true },
