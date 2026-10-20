@@ -1504,6 +1504,7 @@ function initCalculators() {
       mortgage: ["mortgage"],
       car:      ["car"],
       childcare: ["childcare"],
+      utilities: ["utilities"],
       insurance: ["insurance"],
       homeservices: ["internet"], // no toggle; internet, TV and phone share the same rules
     },
