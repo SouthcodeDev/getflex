@@ -1516,6 +1516,17 @@ function initCalculators() {
   const usd2 = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
   const clamp = (v, min, max) => Math.min(Math.max(v, min), max);
 
+  // Writes "$712" + <span class="calculator_cents">.99</span> so the cents can be styled smaller
+  function setMoney(el, value) {
+    const parts = usd2.formatToParts(value);
+    const dot = parts.findIndex((p) => p.type === "decimal");
+    const join = (list) => list.map((p) => p.value).join("");
+    const cents = document.createElement("span");
+    cents.className = "calculator_cents";
+    cents.textContent = join(parts.slice(dot));
+    el.replaceChildren(join(parts.slice(0, dot)), cents);
+  }
+
   // Work in integer cents so the two payments always add up exactly
   function calculate(total, bill) {
     const totalC = Math.round(total * 100);
@@ -1584,8 +1595,8 @@ function initCalculators() {
       ui.thumb.setAttribute("aria-valuenow", state.value);
       ui.thumb.setAttribute("aria-valuetext", `${usd0.format(state.value)} per month`);
 
-      ui.payment1.textContent = usd2.format(result.payment1);
-      ui.payment2.textContent = usd2.format(result.payment2);
+      setMoney(ui.payment1, result.payment1);
+      setMoney(ui.payment2, result.payment2);
       if (ui.feeProcessing) ui.feeProcessing.textContent = usd2.format(result.fees.processing);
       if (ui.feeSplit) ui.feeSplit.textContent = usd2.format(result.fees.split);
       if (ui.feeMembership) ui.feeMembership.textContent = usd2.format(CONFIG.fees.membership);
