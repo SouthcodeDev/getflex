@@ -2829,8 +2829,8 @@ function initMarqueeScrollDirection() {
       })
       .totalProgress(0.5);
 
-    gsap.set(marqueeItems, { xPercent: marqueeDirectionAttr === 1 ? 100 : -100 });
-    animation.timeScale(marqueeDirectionAttr);
+    // Start in the scrolling-down direction so the first scroll doesn't flip it
+    animation.timeScale(-marqueeDirectionAttr);
     animation.play();
 
     marquee.setAttribute('data-marquee-status', 'normal');
